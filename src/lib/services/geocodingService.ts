@@ -26,43 +26,18 @@ export function captureGPS(): Promise<GpsCoords> {
   });
 }
 
-/** Reverse-geocodes coordinates via OpenStreetMap Nominatim (no key required). */
+/**
+ * Reverse geocodes coordinates.
+ * Uses Google Geocoding API when NEXT_PUBLIC_GOOGLE_MAPS_API_KEY is set,
+ * falls back to OpenStreetMap Nominatim (no key required), then to a hardcoded fallback.
+ * Never throws.
+ */
 export async function reverseGeocode(lat: number, lng: number): Promise<ResolvedLocation> {
-  const url = `https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lng}&format=json&addressdetails=1`;
-
-  const res = await fetch(url, {
-    headers: { 'Accept-Language': 'en', 'User-Agent': 'CitySpell-App/1.0' },
-  });
-
-  if (!res.ok) throw new Error('Reverse geocode failed');
-
-  const data = await res.json() as {
-    display_name: string;
-    address: {
-      road?: string;
-      suburb?: string;
-      city_district?: string;
-      city?: string;
-      town?: string;
-      village?: string;
-      state?: string;
-      postcode?: string;
-      ward?: string;
-      neighbourhood?: string;
-    };
-  };
-
-  const a = data.address;
-  const locality = a.suburb ?? a.neighbourhood ?? a.city_district ?? '';
-  const city = a.city ?? a.town ?? a.village ?? '';
-  const road = a.road ? `${a.road}, ` : '';
-  const ward = a.ward ?? a.suburb ?? a.city_district ?? locality;
-  const address = `${road}${locality}${locality && city ? ', ' : ''}${city}`.replace(/^,\s*/, '').trim() || data.display_name;
-
-  // Derive a stable wardId from postcode + locality slug
-  const slug = ward.toLowerCase().replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, '');
-  const cityCode = city.toLowerCase().slice(0, 3).toUpperCase();
-  const wardId = `${cityCode || 'XX'}_${slug || 'general'}`;
-
-  return { lat, lng, address, wardId, wardName: ward || 'General Ward' };
+  // Dynamic import keeps the geocoding adapter out of the SSR bundle
+  try {
+    const { reverseGeocodeBest } = await import('../google/geocodingAdapter');
+    return await reverseGeocodeBest(lat, lng);
+  } catch {
+    return { lat, lng, address: 'Bengaluru, Karnataka', wardId: 'BLR_general', wardName: 'General Ward' };
+  }
 }

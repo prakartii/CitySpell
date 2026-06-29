@@ -6,14 +6,13 @@ import {
   updateDocument,
   subscribeToDocument,
   subscribeToCollection,
+  rawUpdateDocument,
   serverTimestamp,
   arrayUnion,
   where,
   orderBy,
   limit,
 } from '../firebase/firestore';
-import { doc, updateDoc } from 'firebase/firestore';
-import { db } from '../firebase/config';
 import type {
   AssignmentDoc,
   AssignmentCreateInput,
@@ -49,14 +48,13 @@ export async function updateAssignmentStatus(
   note: string,
   by: string,
 ): Promise<void> {
-  const update: Omit<AssignmentUpdate, 'at'> & { at: ReturnType<typeof serverTimestamp> } = {
+  const update = {
     status: newStatus,
     note,
     by,
-    at: serverTimestamp() as ReturnType<typeof serverTimestamp>,
+    at: serverTimestamp(),
   };
-  const ref = doc(db, COLLECTIONS.ASSIGNMENTS, id);
-  await updateDoc(ref, {
+  await rawUpdateDocument(COLLECTIONS.ASSIGNMENTS, id, {
     status: newStatus,
     updates: arrayUnion(update),
     updatedAt: serverTimestamp(),

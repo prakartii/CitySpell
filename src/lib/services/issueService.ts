@@ -7,10 +7,12 @@ import {
   deleteDocument,
   subscribeToDocument,
   subscribeToCollection,
+  rawUpdateDocument,
   serverTimestamp,
   arrayUnion,
   arrayRemove,
   increment,
+  Timestamp,
   where,
   orderBy,
   limit,
@@ -26,19 +28,20 @@ import type {
   DocCallback,
   CollectionCallback,
 } from '../types/collections';
-import { doc, updateDoc } from 'firebase/firestore';
-import { db as firestoreDb } from '../firebase/config';
 
 const PAGE_SIZE = 20;
 
-export async function createIssue(data: IssueCreateInput): Promise<string> {
-  return createDocument<IssueCreateInput>(COLLECTIONS.ISSUES, {
+export async function createIssue(data: any): Promise<string> {
+  const docId = data.id || `issue_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+  await createDocument(COLLECTIONS.ISSUES, {
+    id: docId,
     ...data,
-    upvotes: 0,
-    upvotedBy: [],
-    commentsCount: 0,
-    timeline: [],
-  } as unknown as IssueCreateInput);
+    upvotes: data.upvotes ?? 0,
+    upvotedBy: data.upvotedBy ?? [],
+    commentsCount: data.commentsCount ?? 0,
+    timeline: data.timeline ?? [],
+  }, docId);
+  return docId;
 }
 
 export async function getIssue(issueId: string): Promise<IssueDoc | null> {
@@ -103,8 +106,7 @@ export async function getIssuesByDepartment(departmentId: string): Promise<Issue
 // ─── Upvote ───────────────────────────────────────────────────────────────────
 
 export async function toggleUpvote(issueId: string, uid: string, hasVoted: boolean): Promise<void> {
-  const ref = doc(firestoreDb, COLLECTIONS.ISSUES, issueId);
-  await updateDoc(ref, {
+  await rawUpdateDocument(COLLECTIONS.ISSUES, issueId, {
     upvotedBy: hasVoted ? arrayRemove(uid) : arrayUnion(uid),
     upvotes: increment(hasVoted ? -1 : 1),
     updatedAt: serverTimestamp(),
@@ -119,14 +121,13 @@ export async function updateIssueStatus(
   note: string,
   updatedBy: string,
 ): Promise<void> {
-  const timelineEntry: Omit<IssueTimeline, 'timestamp'> & { timestamp: ReturnType<typeof serverTimestamp> } = {
+  const timelineEntry = {
     status: newStatus,
     note,
     updatedBy,
-    timestamp: serverTimestamp() as ReturnType<typeof serverTimestamp>,
+    timestamp: serverTimestamp(),
   };
-  const ref = doc(firestoreDb, COLLECTIONS.ISSUES, issueId);
-  await updateDoc(ref, {
+  await rawUpdateDocument(COLLECTIONS.ISSUES, issueId, {
     status: newStatus,
     timeline: arrayUnion(timelineEntry),
     updatedAt: serverTimestamp(),
@@ -189,6 +190,33 @@ export function subscribeToDepartmentIssues(
   return subscribeToCollection<IssueDoc>(
     COLLECTIONS.ISSUES,
     [where('assignedTo', '==', departmentId), orderBy('reportedAt', 'desc'), limit(50)],
+    cb,
+  );
+}
+
+export async function addComment(
+  issueId: string,
+  userId: string,
+  userName: string,
+  text: string,
+): Promise<void> {
+  const comment = {
+    id: `comment_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+    userId,
+    userName,
+    text,
+    createdAt: Timestamp.now(),
+  };
+  await rawUpdateDocument(COLLECTIONS.ISSUES, issueId, {
+    comments: arrayUnion(comment),
+    commentsCount: increment(1),
+  });
+}
+
+export function subscribeToAllIssues(cb: CollectionCallback<IssueDoc>): UnsubscribeFn {
+  return subscribeToCollection<IssueDoc>(
+    COLLECTIONS.ISSUES,
+    [orderBy('reportedAt', 'desc'), limit(100)],
     cb,
   );
 }

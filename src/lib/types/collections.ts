@@ -57,15 +57,27 @@ export interface GeoLocation {
 export interface UserDoc {
   uid: string;
   email: string;
-  displayName: string;
+  /** Primary display name (Firestore field: name) */
+  name: string;
+  /** Backward-compat alias for name */
+  displayName?: string;
   role: UserRole;
+  /** Ward ID reference */
   wardId: string;
+  /** Ward display name */
+  ward?: string;
   phone?: string;
+  /** Profile photo URL (Firestore field: photoURL) */
+  photoURL?: string;
+  /** Backward-compat alias for photoURL */
   avatarUrl?: string;
+  /** UID from a phone-auth Firebase session linked to this profile */
+  phoneAuthUid?: string;
   departmentId?: string; // authority users only
   verified: boolean;
   createdAt: Timestamp;
   updatedAt: Timestamp;
+  lastLogin?: Timestamp;
   notificationPreferences: {
     email: boolean;
     push: boolean;
@@ -111,6 +123,14 @@ export interface IssueTimeline {
   timestamp: Timestamp;
 }
 
+export interface IssueComment {
+  id: string;
+  userId: string;
+  userName: string;
+  text: string;
+  createdAt: Date | Timestamp;
+}
+
 export interface IssueDoc {
   id: string;
   title: string;
@@ -136,6 +156,14 @@ export interface IssueDoc {
   };
   timeline: IssueTimeline[];
   tags: string[];
+  // Optional convenience fields stored on documents by the app layer
+  department?: string;
+  locationAddress?: string;
+  createdBy?: string;
+  imageUrl?: string;
+  ward?: string;
+  votes?: number;
+  comments?: IssueComment[];
 }
 
 export type IssueCreateInput = Omit<

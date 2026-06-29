@@ -1,509 +1,743 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useMemo, useCallback, useEffect } from "react";
+import dynamic from "next/dynamic";
 import Link from "next/link";
 import { motion, AnimatePresence } from "framer-motion";
-import Navbar from "@/components/Navbar";
+import { useRouter } from "next/navigation";
+import { useAllIssues } from "@/lib/hooks/useIssues";
+import { useAuthContext } from "@/lib/context/AuthContext";
 import {
-  MapPin,
-  AlertTriangle,
-  CheckCircle2,
-  Clock,
-  X,
-  IndianRupee,
-  Users,
-  Building2,
-  Camera,
-  Filter,
-  Search,
-  Layers,
-  ChevronRight,
-  Zap,
+  Search, X, MapPin, ArrowRight, Layers, Activity, ArrowLeft,
+  Camera, ChevronLeft, ChevronRight, Sliders, SlidersHorizontal,
+  AlertCircle, CheckCircle2, Clock, IndianRupee, Circle, Crosshair,
+  Trash2, Filter,
 } from "lucide-react";
+import type { IssueDoc } from "@/lib/types/collections";
+import type { MapMode } from "@/components/WardIntelligenceMap";
 
-type IssueMarker = {
-  id: number;
-  cx: number;
-  cy: number;
-  type: string;
-  location: string;
-  ward: string;
-  severity: "critical" | "medium" | "resolved";
-  dept: string;
-  economic: string;
-  affectedCitizens: number;
-  riskScore: number;
-  time: string;
-  status: string;
+// ─── Lazy map import (no SSR) ─────────────────────────────────────────────────
+
+const WardIntelligenceMap = dynamic(() => import("@/components/WardIntelligenceMap"), {
+  ssr: false,
+  loading: () => (
+    <div className="w-full h-full flex items-center justify-center gap-3" style={{ background: "#060A12" }}>
+      <div className="w-2 h-2 rounded-full animate-pulse" style={{ background: "#00BFFF" }} />
+      <span style={{ fontFamily: "monospace", fontSize: 10, color: "#3A4E6A", letterSpacing: "0.2em" }}>
+        INITIALIZING INTELLIGENCE MAP
+      </span>
+    </div>
+  ),
+});
+
+// ─── Design tokens ────────────────────────────────────────────────────────────
+
+const C = {
+  bg: "#060A12", panel: "#090C14", card: "#0D1220",
+  border: "#1A2640", borderDim: "#0F1925",
+  accent: "#00BFFF", accentBg: "rgba(0,191,255,0.1)",
+  green: "#39E88C", red: "#FF4D4D", orange: "#FF8C42", amber: "#FFB020",
+  text: "#E2EBF6", mid: "#6B82A0", dim: "#3A4E6A",
 };
 
-const markers: IssueMarker[] = [
-  { id: 1, cx: 100, cy: 90, type: "Road Pothole", location: "MG Road, Indiranagar", ward: "Ward 14", severity: "critical", dept: "PWD", economic: "₹52K/day", affectedCitizens: 3200, riskScore: 91, time: "2h ago", status: "In Progress" },
-  { id: 2, cx: 220, cy: 160, type: "Waterlogging", location: "HSR Layout 5th Sector", ward: "Ward 21", severity: "critical", dept: "BBMP", economic: "₹38K/day", affectedCitizens: 2100, riskScore: 84, time: "3h ago", status: "Assigned" },
-  { id: 3, cx: 340, cy: 100, type: "Bridge Crack", location: "Whitefield Main Road", ward: "Ward 35", severity: "critical", dept: "BBMP-E", economic: "₹78K/day", affectedCitizens: 5000, riskScore: 97, time: "6h ago", status: "Pending" },
-  { id: 4, cx: 160, cy: 260, type: "Broken Streetlight", location: "Koramangala 6th Block", ward: "Ward 22", severity: "medium", dept: "BESCOM", economic: "₹12K/day", affectedCitizens: 800, riskScore: 58, time: "8h ago", status: "Assigned" },
-  { id: 5, cx: 80, cy: 200, type: "Garbage Dump", location: "Shivajinagar Bus Stand", ward: "Ward 7", severity: "medium", dept: "BBMP-S", economic: "₹9K/day", affectedCitizens: 600, riskScore: 52, time: "12h ago", status: "In Progress" },
-  { id: 6, cx: 300, cy: 220, type: "Sewage Leak", location: "Bellandur Lake Road", ward: "Ward 31", severity: "medium", dept: "BWSSB", economic: "₹22K/day", affectedCitizens: 1400, riskScore: 73, time: "5h ago", status: "Assigned" },
-  { id: 7, cx: 140, cy: 340, type: "Road Pothole", location: "JP Nagar 3rd Phase", ward: "Ward 42", severity: "resolved", dept: "PWD", economic: "₹18K/day", affectedCitizens: 1100, riskScore: 0, time: "1d ago", status: "Resolved" },
-  { id: 8, cx: 260, cy: 310, type: "Tree Fall", location: "Jayanagar 4th Block", ward: "Ward 39", severity: "resolved", dept: "BBMP-H", economic: "₹8K/day", affectedCitizens: 400, riskScore: 0, time: "2d ago", status: "Resolved" },
-  { id: 9, cx: 380, cy: 260, type: "Power Outage", location: "Electronic City Phase 1", ward: "Ward 56", severity: "resolved", dept: "BESCOM", economic: "₹45K/day", affectedCitizens: 8000, riskScore: 0, time: "3d ago", status: "Resolved" },
-  { id: 10, cx: 50, cy: 310, type: "Water Main Break", location: "Rajajinagar 2nd Block", ward: "Ward 9", severity: "medium", dept: "BWSSB", economic: "₹31K/day", affectedCitizens: 2200, riskScore: 76, time: "4h ago", status: "Pending" },
-  { id: 11, cx: 430, cy: 150, type: "Signal Failure", location: "Marathahalli Bridge", ward: "Ward 48", severity: "critical", dept: "BBMP-T", economic: "₹29K/day", affectedCitizens: 4500, riskScore: 88, time: "1h ago", status: "Pending" },
-];
+const SEV = {
+  critical: { color: C.red,    label: "CRITICAL" },
+  high:     { color: C.orange, label: "HIGH"     },
+  medium:   { color: C.amber,  label: "MEDIUM"   },
+  low:      { color: C.green,  label: "LOW"       },
+} as const;
 
-const wardZones = [
-  { x: 20, y: 20, w: 180, h: 140, ward: "Ward 14", score: 78, color: "#7A9E6E" },
-  { x: 220, y: 20, w: 160, h: 130, ward: "Ward 35", score: 42, color: "#D4726A" },
-  { x: 20, y: 180, w: 140, h: 160, ward: "Ward 9", score: 64, color: "#C8A87A" },
-  { x: 180, y: 160, w: 160, h: 170, ward: "Ward 22", score: 71, color: "#C8A87A" },
-  { x: 360, y: 20, w: 120, h: 380, ward: "Ward 48", score: 39, color: "#D4726A" },
-  { x: 20, y: 360, w: 340, h: 120, ward: "Ward 42", score: 85, color: "#7A9E6E" },
-];
+const STATUS_LABELS: Record<string, string> = {
+  open: "OPEN", assigned: "ASSIGNED", in_progress: "IN PROGRESS",
+  resolved: "RESOLVED", closed: "CLOSED", rejected: "REJECTED",
+};
 
-function severityColor(s: IssueMarker["severity"]) {
-  return s === "critical" ? "#D4726A" : s === "medium" ? "#C8A87A" : "#7A9E6E";
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
+function fmtINR(n: number) {
+  if (n >= 1e7) return `₹${(n / 1e7).toFixed(1)}Cr`;
+  if (n >= 1e5) return `₹${(n / 1e5).toFixed(1)}L`;
+  if (n >= 1e3) return `₹${Math.round(n / 1e3)}K`;
+  return `₹${n}`;
 }
 
-function DetailCard({ marker, onClose }: { marker: IssueMarker; onClose: () => void }) {
-  const color = severityColor(marker.severity);
+function relTime(ts: IssueDoc["reportedAt"] | undefined): string {
+  if (!ts) return "—";
+  const d = typeof (ts as { toDate?: () => Date }).toDate === "function"
+    ? (ts as { toDate: () => Date }).toDate()
+    : new Date(ts as unknown as string);
+  const diff = (Date.now() - d.getTime()) / 1000;
+  if (diff < 60) return `${Math.floor(diff)}s ago`;
+  if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
+  if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`;
+  return `${Math.floor(diff / 86400)}d ago`;
+}
+
+function haversine(a: [number, number], b: [number, number]): number {
+  const R = 6371, dLat = (b[0] - a[0]) * Math.PI / 180, dLon = (b[1] - a[1]) * Math.PI / 180;
+  const s = Math.sin(dLat / 2) ** 2 + Math.cos(a[0] * Math.PI / 180) * Math.cos(b[0] * Math.PI / 180) * Math.sin(dLon / 2) ** 2;
+  return R * 2 * Math.atan2(Math.sqrt(s), Math.sqrt(1 - s));
+}
+
+function isoLike(ts: IssueDoc["reportedAt"] | undefined): number {
+  if (!ts) return 0;
+  const d = typeof (ts as { toDate?: () => Date }).toDate === "function"
+    ? (ts as { toDate: () => Date }).toDate()
+    : new Date(ts as unknown as string);
+  return d.getTime();
+}
+
+// ─── Filter chip ──────────────────────────────────────────────────────────────
+
+function Chip({ active, onClick, label, accent = C.accent, count }: {
+  active: boolean; onClick: () => void; label: string; accent?: string; count?: number;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      className="flex items-center gap-1 px-2 py-1 rounded transition-all"
+      style={{
+        border: `1px solid ${active ? accent : C.border}`,
+        background: active ? `${accent}18` : "transparent",
+        color: active ? accent : C.dim,
+        fontFamily: "monospace",
+        fontSize: 9,
+        fontWeight: "bold",
+        letterSpacing: "0.1em",
+      }}
+    >
+      {active && <div className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ background: accent }} />}
+      {label}
+      {count !== undefined && (
+        <span style={{ color: active ? accent : C.borderDim, opacity: active ? 1 : 0.5 }}>({count})</span>
+      )}
+    </button>
+  );
+}
+
+// ─── Issue Intel Card ─────────────────────────────────────────────────────────
+
+function IssueIntelCard({ issue, onClose }: { issue: IssueDoc; onClose: () => void }) {
+  const router = useRouter();
+  const img = issue.imageUrl || issue.images?.[0];
+  const sevCfg = SEV[issue.severity as keyof typeof SEV] ?? SEV.medium;
+  const isActive = !["resolved", "closed", "rejected"].includes(issue.status ?? "");
+  const cost = issue.economicImpact?.estimatedLossINR || issue.aiAnalysis?.estimatedCost || 0;
+  const confidence = Math.round((issue.aiAnalysis?.confidence ?? 0.8) * 100);
+  const priority = (issue.aiAnalysis?.priority ?? 5) * 10;
+
   return (
     <motion.div
-      initial={{ opacity: 0, scale: 0.92, y: 8 }}
-      animate={{ opacity: 1, scale: 1, y: 0 }}
-      exit={{ opacity: 0, scale: 0.92, y: 8 }}
-      transition={{ duration: 0.2 }}
-      className="glass rounded-2xl p-5 w-72 shadow-xl shadow-black/12 border border-white/80"
+      initial={{ opacity: 0, x: 32 }}
+      animate={{ opacity: 1, x: 0 }}
+      exit={{ opacity: 0, x: 32 }}
+      transition={{ duration: 0.28, ease: [0.22, 1, 0.36, 1] }}
+      className="absolute right-3 top-3 bottom-3 z-20 flex flex-col"
+      style={{ width: 268, pointerEvents: "auto" }}
     >
-      {/* Header */}
-      <div className="flex items-start justify-between mb-4">
-        <div className="flex items-center gap-2">
-          <div className="w-8 h-8 rounded-xl flex items-center justify-center" style={{ background: `${color}18` }}>
-            <AlertTriangle size={14} style={{ color }} />
-          </div>
-          <div>
-            <p className="text-sm font-semibold text-[#1A1A1C] leading-tight">{marker.type}</p>
-            <p className="text-[10px] text-[#9A9AA4]">{marker.ward}</p>
+      <div className="flex-1 overflow-y-auto rounded-xl border shadow-2xl" style={{ background: C.card, borderColor: "#1E3050", boxShadow: "0 20px 60px rgba(0,0,0,0.7)" }}>
+        {/* Photo */}
+        <div className="relative h-36 flex-shrink-0" style={{ background: "#050810" }}>
+          {img ? (
+            /* eslint-disable-next-line @next/next/no-img-element */
+            <img src={img} alt={issue.title} className="w-full h-full object-cover" />
+          ) : (
+            <div className="w-full h-full flex items-center justify-center">
+              <Camera size={28} style={{ color: C.borderDim }} />
+            </div>
+          )}
+          <div className="absolute inset-0" style={{ background: "linear-gradient(to bottom, transparent 50%, rgba(13,18,32,0.95))" }} />
+
+          {/* Badges */}
+          {isActive && (
+            <div className="absolute top-2.5 left-2.5 flex items-center gap-1 rounded-full px-2 py-0.5"
+              style={{ background: "rgba(255,77,77,0.18)", border: "1px solid rgba(255,77,77,0.4)" }}>
+              <div className="w-1.5 h-1.5 rounded-full animate-pulse" style={{ background: C.red }} />
+              <span style={{ fontFamily: "monospace", fontSize: 8, color: C.red, fontWeight: "bold", letterSpacing: "0.2em" }}>LIVE</span>
+            </div>
+          )}
+          <button onClick={onClose} className="absolute top-2.5 right-2.5 w-6 h-6 rounded-lg flex items-center justify-center transition-all"
+            style={{ background: "rgba(6,10,18,0.7)", border: `1px solid ${C.border}` }}>
+            <X size={11} style={{ color: C.mid }} />
+          </button>
+          <div className="absolute bottom-2 right-2 rounded px-1.5 py-0.5" style={{ background: "rgba(0,0,0,0.7)", backdropFilter: "blur(4px)" }}>
+            <span style={{ fontFamily: "monospace", fontSize: 9, color: C.accent }}>#{issue.id.slice(0, 8).toUpperCase()}</span>
           </div>
         </div>
-        <button
-          onClick={onClose}
-          className="p-1.5 rounded-lg hover:bg-[#F0EDE8] transition-all text-[#9A9AA4] hover:text-[#5A5A62]"
-        >
-          <X size={13} />
-        </button>
-      </div>
 
-      {/* Location */}
-      <div className="flex items-center gap-1.5 mb-4 text-[11px] text-[#5A5A62]">
-        <MapPin size={11} className="text-[#9A9AA4] flex-shrink-0" />
-        <span className="truncate">{marker.location}</span>
-      </div>
+        {/* Data */}
+        <div className="p-4">
+          <p style={{ fontFamily: "monospace", fontSize: 7, letterSpacing: "0.25em", color: C.dim, marginBottom: 4 }}>INCIDENT INTELLIGENCE FILE</p>
+          <h3 className="text-sm font-semibold leading-snug mb-1" style={{ color: C.text }}>{issue.title}</h3>
+          <p className="flex items-center gap-1 mb-3" style={{ fontSize: 10, color: C.dim }}>
+            <MapPin size={9} style={{ flexShrink: 0 }} />
+            <span className="truncate">{issue.location?.address || issue.locationAddress || "Location unknown"}</span>
+          </p>
 
-      {/* Status */}
-      <div className="flex items-center gap-2 mb-4">
-        <span
-          className="text-[10px] font-semibold px-2.5 py-1 rounded-full"
-          style={{ background: `${color}18`, color }}
-        >
-          {marker.status}
-        </span>
-        <span className="text-[10px] text-[#9A9AA4]">{marker.time}</span>
-      </div>
+          {/* Chips */}
+          <div className="flex flex-wrap gap-1 mb-3">
+            <span className="rounded px-1.5 py-0.5" style={{ fontFamily: "monospace", fontSize: 8, fontWeight: "bold", color: sevCfg.color, border: `1px solid ${sevCfg.color}50`, background: `${sevCfg.color}18` }}>
+              ■ {sevCfg.label}
+            </span>
+            {(issue.department || issue.assignedTo) && (
+              <span className="rounded px-1.5 py-0.5 truncate max-w-[110px]" style={{ fontFamily: "monospace", fontSize: 8, fontWeight: "bold", color: C.accent, border: `1px solid ${C.accent}40`, background: `${C.accent}12` }}>
+                {issue.department || issue.assignedTo}
+              </span>
+            )}
+            <span className="rounded px-1.5 py-0.5" style={{ fontFamily: "monospace", fontSize: 8, fontWeight: "bold", color: "#4A9EFF", border: "1px solid rgba(74,158,255,0.3)", background: "rgba(74,158,255,0.1)" }}>
+              {STATUS_LABELS[issue.status] ?? issue.status?.toUpperCase()}
+            </span>
+          </div>
 
-      {/* Metrics grid */}
-      <div className="grid grid-cols-2 gap-2 mb-4">
-        {[
-          { icon: IndianRupee, label: "Economic Loss", value: marker.economic, color: "#C8A87A" },
-          { icon: Users, label: "Affected", value: `${(marker.affectedCitizens / 1000).toFixed(1)}K`, color: "#6A88AA" },
-          { icon: Zap, label: "Risk Score", value: marker.severity === "resolved" ? "—" : `${marker.riskScore}`, color: marker.severity === "resolved" ? "#7A9E6E" : color },
-          { icon: Building2, label: "Department", value: marker.dept, color: "#9A9C5E" },
-        ].map((m) => {
-          const Icon = m.icon;
-          return (
-            <div key={m.label} className="bg-[#F8F7F4] rounded-xl p-2.5">
-              <div className="flex items-center gap-1 mb-1">
-                <Icon size={10} style={{ color: m.color }} />
-                <span className="text-[9px] text-[#9A9AA4] font-medium uppercase tracking-wide">{m.label}</span>
+          {/* Data grid 2x2 */}
+          <div className="grid grid-cols-2 gap-1.5 mb-3">
+            {[
+              { label: "DAILY LOSS", value: fmtINR(cost), color: C.amber },
+              { label: "REPORTED",   value: relTime(issue.reportedAt), color: C.text },
+              { label: "AFFECTED",   value: `${(issue.economicImpact?.affectedResidents ?? 0).toLocaleString("en-IN")}+`, color: C.green },
+              { label: "AI PRIORITY",value: `${priority}/100`, color: sevCfg.color },
+            ].map((d) => (
+              <div key={d.label} className="rounded-lg p-2" style={{ background: "#070B14", border: `1px solid ${C.borderDim}` }}>
+                <p style={{ fontFamily: "monospace", fontSize: 7, letterSpacing: "0.15em", color: C.dim, marginBottom: 2 }}>{d.label}</p>
+                <p style={{ fontFamily: "monospace", fontSize: 12, fontWeight: "bold", color: d.color }}>{d.value}</p>
               </div>
-              <p className="text-sm font-bold text-[#1A1A1C]">{m.value}</p>
-            </div>
-          );
-        })}
-      </div>
+            ))}
+          </div>
 
-      {/* CTA */}
-      {marker.severity !== "resolved" && (
-        <button className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl bg-[#1A1A1C] text-white text-xs font-semibold hover:bg-[#2C2C2E] transition-all">
-          <Camera size={12} />
-          Report Update
-          <ChevronRight size={12} />
-        </button>
-      )}
+          {/* Reporter */}
+          <p className="mb-2" style={{ fontFamily: "monospace", fontSize: 9, color: C.dim }}>
+            REPORTER · <span style={{ color: C.accent }}>#{(issue.reportedBy || "ANON").slice(0, 8).toUpperCase()}</span>
+          </p>
+
+          {/* AI confidence bar */}
+          <div className="mb-4">
+            <div className="flex justify-between mb-1">
+              <span style={{ fontFamily: "monospace", fontSize: 7, color: C.dim, letterSpacing: "0.15em" }}>AI CONFIDENCE</span>
+              <span style={{ fontFamily: "monospace", fontSize: 7, color: C.accent }}>{confidence}%</span>
+            </div>
+            <div className="h-px rounded-full" style={{ background: C.border }}>
+              <div className="h-px rounded-full" style={{ width: `${confidence}%`, background: `linear-gradient(to right, ${C.accent}, ${C.green})` }} />
+            </div>
+          </div>
+
+          {/* CTA */}
+          <button
+            onClick={() => router.push(`/issues/${issue.id}`)}
+            className="w-full py-2.5 rounded-lg flex items-center justify-center gap-1.5 transition-all hover:opacity-90"
+            style={{ border: `1px solid ${C.accent}40`, background: `${C.accent}12`, fontFamily: "monospace", fontSize: 10, fontWeight: "bold", color: C.accent, letterSpacing: "0.1em" }}
+          >
+            OPEN INSPECTION FILE <ArrowRight size={11} />
+          </button>
+        </div>
+      </div>
     </motion.div>
   );
 }
 
-function WardMap({ onSelectMarker }: { onSelectMarker: (m: IssueMarker) => void }) {
-  const [hovered, setHovered] = useState<number | null>(null);
+// ─── Page ─────────────────────────────────────────────────────────────────────
 
-  const cityBlocks = [
-    { x: 30, y: 30, w: 60, h: 50 }, { x: 110, y: 30, w: 80, h: 35 },
-    { x: 230, y: 30, w: 50, h: 70 }, { x: 300, y: 30, w: 70, h: 50 },
-    { x: 30, y: 100, w: 50, h: 70 }, { x: 100, y: 90, w: 100, h: 55 },
-    { x: 230, y: 120, w: 60, h: 60 }, { x: 310, y: 100, w: 60, h: 80 },
-    { x: 390, y: 30, w: 80, h: 60 }, { x: 390, y: 110, w: 80, h: 90 },
-    { x: 30, y: 190, w: 80, h: 80 }, { x: 130, y: 170, w: 70, h: 70 },
-    { x: 220, y: 200, w: 80, h: 60 }, { x: 320, y: 200, w: 60, h: 70 },
-    { x: 390, y: 220, w: 80, h: 70 }, { x: 30, y: 290, w: 120, h: 80 },
-    { x: 170, y: 270, w: 80, h: 90 }, { x: 270, y: 290, w: 100, h: 70 },
-    { x: 390, y: 310, w: 80, h: 90 }, { x: 30, y: 380, w: 200, h: 90 },
-    { x: 250, y: 380, w: 150, h: 90 }, { x: 30, y: 480, w: 440, h: 40 },
-  ];
-
-  return (
-    <svg viewBox="0 0 480 530" className="w-full h-full" xmlns="http://www.w3.org/2000/svg">
-      <defs>
-        <filter id="markerGlow">
-          <feGaussianBlur stdDeviation="3" result="blur" />
-          <feMerge>
-            <feMergeNode in="blur" />
-            <feMergeNode in="SourceGraphic" />
-          </feMerge>
-        </filter>
-        <filter id="shadow" x="-50%" y="-50%" width="200%" height="200%">
-          <feDropShadow dx="0" dy="2" stdDeviation="4" floodColor="rgba(0,0,0,0.12)" />
-        </filter>
-      </defs>
-
-      {/* Background */}
-      <rect x="0" y="0" width="480" height="530" fill="#FAF9F6" />
-
-      {/* Grid */}
-      {Array.from({ length: 13 }).map((_, i) => (
-        <g key={i}>
-          <line x1={i * 40} y1="0" x2={i * 40} y2="530" stroke="#EDEAE4" strokeWidth="0.5" />
-          <line x1="0" y1={i * 40} x2="480" y2={i * 40} stroke="#EDEAE4" strokeWidth="0.5" />
-        </g>
-      ))}
-
-      {/* Ward zones */}
-      {wardZones.map((z, i) => (
-        <rect
-          key={i}
-          x={z.x}
-          y={z.y}
-          width={z.w}
-          height={z.h}
-          rx="4"
-          fill={z.color}
-          opacity="0.06"
-          stroke={z.color}
-          strokeWidth="1"
-          strokeOpacity="0.3"
-          strokeDasharray="4 4"
-        />
-      ))}
-
-      {/* Ward labels */}
-      {wardZones.map((z, i) => (
-        <text
-          key={`label-${i}`}
-          x={z.x + z.w / 2}
-          y={z.y + 14}
-          textAnchor="middle"
-          fontSize="7"
-          fill={z.color}
-          opacity="0.7"
-          fontWeight="600"
-          fontFamily="system-ui"
-        >
-          {z.ward}
-        </text>
-      ))}
-
-      {/* City blocks */}
-      {cityBlocks.map((b, i) => (
-        <rect
-          key={i}
-          x={b.x}
-          y={b.y}
-          width={b.w}
-          height={b.h}
-          rx="4"
-          fill="#EDE9E0"
-          stroke="#E0DCD4"
-          strokeWidth="0.5"
-        />
-      ))}
-
-      {/* Main roads */}
-      <rect x="200" y="0" width="22" height="530" fill="#FAF9F6" />
-      <rect x="0" y="200" width="480" height="22" fill="#FAF9F6" />
-      <rect x="0" y="380" width="480" height="14" fill="#FAF9F6" />
-      <rect x="380" y="0" width="14" height="530" fill="#FAF9F6" />
-
-      {/* Markers */}
-      {markers.map((m) => {
-        const color = severityColor(m.severity);
-        const isHovered = hovered === m.id;
-        return (
-          <g
-            key={m.id}
-            style={{ cursor: "pointer" }}
-            onMouseEnter={() => setHovered(m.id)}
-            onMouseLeave={() => setHovered(null)}
-            onClick={() => onSelectMarker(m)}
-          >
-            {/* Pulse ring for critical */}
-            {m.severity === "critical" && (
-              <circle cx={m.cx} cy={m.cy} r={isHovered ? 14 : 10} fill={color} opacity="0.12" />
-            )}
-            {/* Main dot */}
-            <circle
-              cx={m.cx}
-              cy={m.cy}
-              r={isHovered ? 9 : 7}
-              fill={color}
-              filter={isHovered ? "url(#markerGlow)" : undefined}
-              style={{ transition: "r 0.15s ease" }}
-            />
-            <circle cx={m.cx} cy={m.cy} r={isHovered ? 4 : 3} fill="white" opacity="0.6" />
-
-            {/* Hover label */}
-            {isHovered && (
-              <g filter="url(#shadow)">
-                <rect
-                  x={m.cx - 50}
-                  y={m.cy - 28}
-                  width="100"
-                  height="18"
-                  rx="5"
-                  fill="white"
-                />
-                <text
-                  x={m.cx}
-                  y={m.cy - 16}
-                  textAnchor="middle"
-                  fontSize="8"
-                  fill="#1A1A1C"
-                  fontWeight="600"
-                  fontFamily="system-ui"
-                >
-                  {m.type}
-                </text>
-              </g>
-            )}
-          </g>
-        );
-      })}
-    </svg>
-  );
+interface Filters {
+  severities: Set<string>;
+  statuses: Set<string>;
+  departments: Set<string>;
+  dateRange: "all" | "today" | "week" | "month";
+  search: string;
 }
 
+const INIT_FILTERS: Filters = {
+  severities: new Set(),
+  statuses: new Set(),
+  departments: new Set(),
+  dateRange: "all",
+  search: "",
+};
+
 export default function MapPage() {
-  const [selectedMarker, setSelectedMarker] = useState<IssueMarker | null>(null);
-  const [filter, setFilter] = useState<"all" | "critical" | "medium" | "resolved">("all");
-  const [search, setSearch] = useState("");
+  const { isAuthenticated, loading: authLoading } = useAuthContext();
+  const router = useRouter();
+  const { issues, loading: issuesLoading } = useAllIssues();
 
-  const filteredMarkers = markers.filter((m) => {
-    const matchFilter = filter === "all" || m.severity === filter;
-    const matchSearch = !search || m.type.toLowerCase().includes(search.toLowerCase()) || m.location.toLowerCase().includes(search.toLowerCase());
-    return matchFilter && matchSearch;
-  });
+  const [filters, setFilters] = useState<Filters>(INIT_FILTERS);
+  const [mapMode, setMapMode] = useState<MapMode>("standard");
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [panelOpen, setPanelOpen] = useState(true);
+  const [drawMode, setDrawMode] = useState(false);
+  const [radiusCenter, setRadiusCenter] = useState<[number, number] | null>(null);
+  const [radiusKm, setRadiusKm] = useState(3);
 
-  const counts = {
-    critical: markers.filter((m) => m.severity === "critical").length,
-    medium: markers.filter((m) => m.severity === "medium").length,
-    resolved: markers.filter((m) => m.severity === "resolved").length,
-  };
+  useEffect(() => {
+    if (!authLoading && !isAuthenticated) router.push("/login");
+  }, [isAuthenticated, authLoading, router]);
+
+  // Derived data
+  const departments = useMemo(() => {
+    const s = new Set<string>();
+    issues.forEach((i) => { if (i.department) s.add(i.department); });
+    return Array.from(s).sort();
+  }, [issues]);
+
+  const radiusFilter = useMemo(() =>
+    radiusCenter ? { center: radiusCenter, radiusKm } : null,
+    [radiusCenter, radiusKm]
+  );
+
+  const filteredIssues = useMemo(() => {
+    const now = Date.now(), day = 86_400_000;
+    return issues.filter((issue) => {
+      if (filters.severities.size > 0 && !filters.severities.has(issue.severity)) return false;
+      if (filters.statuses.size > 0 && !filters.statuses.has(issue.status)) return false;
+      if (filters.departments.size > 0 && !filters.departments.has(issue.department ?? "")) return false;
+      if (filters.dateRange !== "all") {
+        const cutoff = filters.dateRange === "today" ? now - day : filters.dateRange === "week" ? now - 7 * day : now - 30 * day;
+        if (isoLike(issue.reportedAt) < cutoff) return false;
+      }
+      if (filters.search) {
+        const q = filters.search.toLowerCase();
+        const haystack = `${issue.title} ${issue.category} ${issue.department} ${issue.location?.address} ${issue.ward}`.toLowerCase();
+        if (!haystack.includes(q)) return false;
+      }
+      if (radiusFilter) {
+        const lat = Number(issue.location?.lat ?? 0), lng = Number(issue.location?.lng ?? 0);
+        if (!lat || !lng) return false;
+        if (haversine(radiusFilter.center, [lat, lng]) > radiusFilter.radiusKm) return false;
+      }
+      return true;
+    });
+  }, [issues, filters, radiusFilter]);
+
+  const counts = useMemo(() => ({
+    critical: issues.filter((i) => i.severity === "critical" && !["resolved", "closed"].includes(i.status)).length,
+    high:     issues.filter((i) => i.severity === "high" && !["resolved", "closed"].includes(i.status)).length,
+    medium:   issues.filter((i) => i.severity === "medium" && !["resolved", "closed"].includes(i.status)).length,
+    low:      issues.filter((i) => i.severity === "low" && !["resolved", "closed"].includes(i.status)).length,
+    open:     issues.filter((i) => i.status === "open").length,
+    assigned: issues.filter((i) => i.status === "assigned").length,
+    inProg:   issues.filter((i) => i.status === "in_progress").length,
+    resolved: issues.filter((i) => ["resolved", "closed"].includes(i.status)).length,
+  }), [issues]);
+
+  const activeFilterCount = filters.severities.size + filters.statuses.size + filters.departments.size +
+    (filters.dateRange !== "all" ? 1 : 0) + (radiusFilter ? 1 : 0);
+
+  const selectedIssue = useMemo(() => issues.find((i) => i.id === selectedId), [issues, selectedId]);
+
+  const toggle = useCallback(<K extends keyof Filters>(key: K, val: string) => {
+    setFilters((prev) => {
+      const s = new Set(prev[key] as Set<string>);
+      s.has(val) ? s.delete(val) : s.add(val);
+      return { ...prev, [key]: s };
+    });
+  }, []);
+
+  const handleMapClick = useCallback((latlng: [number, number]) => {
+    setRadiusCenter(latlng);
+    setDrawMode(false);
+  }, []);
+
+  const clearRadius = useCallback(() => { setRadiusCenter(null); setDrawMode(false); }, []);
+  const clearAll = useCallback(() => { setFilters(INIT_FILTERS); clearRadius(); }, [clearRadius]);
+
+  if (authLoading) {
+    return (
+      <div className="h-screen flex items-center justify-center gap-3" style={{ background: C.bg }}>
+        <div className="w-2 h-2 rounded-full animate-pulse" style={{ background: C.accent }} />
+        <span style={{ fontFamily: "monospace", fontSize: 10, color: C.dim, letterSpacing: "0.2em" }}>VERIFYING CREDENTIALS</span>
+      </div>
+    );
+  }
 
   return (
-    <div className="min-h-screen bg-[#FAF9F6] flex flex-col">
-      <Navbar />
+    <div className="h-screen flex flex-col overflow-hidden" style={{ background: C.bg, color: C.text, fontFamily: "system-ui, sans-serif" }}>
 
-      <div className="flex-1 pt-20 flex flex-col">
-        {/* Top controls */}
-        <div className="px-6 py-4 bg-white border-b border-[#E4E2DC] flex flex-wrap items-center gap-4">
-          <div className="flex items-center gap-2">
-            <MapPin size={14} className="text-[#7A9E6E]" />
-            <h1 className="text-sm font-semibold text-[#1A1A1C]">Ward Intelligence Map</h1>
-            <span className="text-[10px] text-[#9A9AA4] bg-[#F5F4F1] px-2 py-0.5 rounded-full">Bengaluru</span>
+      {/* ── TOP INTELLIGENCE BAR ─────────────────────────────────────────────── */}
+      <div className="flex-shrink-0 flex items-center gap-3 px-4 border-b" style={{ height: 48, background: C.panel, borderColor: C.border }}>
+        {/* Panel toggle */}
+        <button onClick={() => setPanelOpen((p) => !p)}
+          className="w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0 transition-all"
+          style={{ border: `1px solid ${C.border}`, background: panelOpen ? `${C.accent}12` : "transparent", color: panelOpen ? C.accent : C.dim }}>
+          {panelOpen ? <ChevronLeft size={13} /> : <ChevronRight size={13} />}
+        </button>
+
+        {/* Brand */}
+        <div className="flex items-center gap-2 flex-shrink-0">
+          <div className="w-1.5 h-1.5 rounded-full animate-pulse" style={{ background: C.accent }} />
+          <span style={{ fontFamily: "monospace", fontSize: 11, fontWeight: "bold", color: C.text, letterSpacing: "0.15em" }}>CITYSPELL</span>
+          <span style={{ fontFamily: "monospace", fontSize: 9, color: C.dim, letterSpacing: "0.1em" }}>INTELLIGENCE</span>
+          <span className="rounded-full px-2 py-0.5" style={{ fontFamily: "monospace", fontSize: 8, color: C.accent, border: `1px solid ${C.accent}40`, background: `${C.accent}10`, letterSpacing: "0.1em" }}>BLR</span>
+        </div>
+
+        {/* Stat pills */}
+        <div className="hidden md:flex items-center gap-2 ml-2">
+          {[
+            { label: "CRITICAL", val: counts.critical, color: C.red },
+            { label: "ACTIVE",   val: counts.open + counts.assigned + counts.inProg, color: C.amber },
+            { label: "RESOLVED", val: counts.resolved, color: C.green },
+          ].map((s) => (
+            <div key={s.label} className="flex items-center gap-1 rounded px-2 py-0.5" style={{ border: `1px solid ${s.color}30`, background: `${s.color}0D` }}>
+              <span style={{ fontFamily: "monospace", fontSize: 8, color: s.color, letterSpacing: "0.1em" }}>{s.label}</span>
+              <span style={{ fontFamily: "monospace", fontSize: 11, fontWeight: "bold", color: s.color }}>{s.val}</span>
+            </div>
+          ))}
+        </div>
+
+        {/* Search */}
+        <div className="flex-1 max-w-xs relative ml-2">
+          <Search size={12} className="absolute left-2.5 top-1/2 -translate-y-1/2" style={{ color: C.dim }} />
+          <input
+            type="text"
+            placeholder="SEARCH INCIDENTS..."
+            value={filters.search}
+            onChange={(e) => setFilters((p) => ({ ...p, search: e.target.value }))}
+            className="w-full pl-8 pr-3 py-1.5 rounded-lg focus:outline-none"
+            style={{
+              background: C.card, border: `1px solid ${filters.search ? C.accent : C.border}`,
+              color: C.text, fontFamily: "monospace", fontSize: 10, letterSpacing: "0.05em",
+              caretColor: C.accent,
+            }}
+          />
+          {filters.search && (
+            <button onClick={() => setFilters((p) => ({ ...p, search: "" }))}
+              className="absolute right-2 top-1/2 -translate-y-1/2"><X size={11} style={{ color: C.dim }} /></button>
+          )}
+        </div>
+
+        <div className="ml-auto flex items-center gap-2">
+          {/* Map mode toggle */}
+          <div className="flex rounded-lg overflow-hidden" style={{ border: `1px solid ${C.border}` }}>
+            {(["standard", "cluster", "heatmap"] as const).map((m, i) => (
+              <button key={m} onClick={() => setMapMode(m)}
+                className="px-2.5 py-1 transition-all"
+                style={{
+                  background: mapMode === m ? `${C.accent}18` : "transparent",
+                  color: mapMode === m ? C.accent : C.dim,
+                  fontFamily: "monospace", fontSize: 9, fontWeight: "bold", letterSpacing: "0.1em",
+                  borderRight: i < 2 ? `1px solid ${C.border}` : "none",
+                }}>
+                {m === "standard" ? "STD" : m === "cluster" ? "CLSTR" : "HEAT"}
+              </button>
+            ))}
           </div>
 
-          {/* Search */}
-          <div className="relative flex-1 max-w-xs">
-            <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#9A9AA4]" />
-            <input
-              type="text"
-              placeholder="Search issues..."
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              className="w-full pl-8 pr-3 py-2 rounded-xl border border-[#E4E2DC] bg-[#FAF9F6] text-xs text-[#1A1A1C] placeholder-[#B0ACA4] focus:outline-none focus:ring-2 focus:ring-[#7A9E6E]/20 focus:border-[#7A9E6E] transition-all"
+          {/* Draw radius */}
+          <button onClick={() => { setDrawMode(true); setPanelOpen(true); }}
+            className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg transition-all"
+            style={{
+              border: `1px solid ${drawMode ? C.accent : C.border}`,
+              background: drawMode ? `${C.accent}18` : "transparent",
+              color: drawMode ? C.accent : C.dim,
+              fontFamily: "monospace", fontSize: 9, fontWeight: "bold", letterSpacing: "0.1em",
+            }}>
+            <Crosshair size={11} />
+            RADIUS
+          </button>
+
+          {/* Active filter badge */}
+          {activeFilterCount > 0 && (
+            <button onClick={clearAll} className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg transition-all"
+              style={{ border: `1px solid ${C.amber}40`, background: `${C.amber}12`, color: C.amber, fontFamily: "monospace", fontSize: 9, fontWeight: "bold" }}>
+              <Filter size={10} />
+              {activeFilterCount}
+              <X size={9} />
+            </button>
+          )}
+
+          <Link href="/citizen-dashboard" className="flex items-center gap-1 px-2.5 py-1 rounded-lg transition-all"
+            style={{ border: `1px solid ${C.border}`, color: C.dim, fontFamily: "monospace", fontSize: 9, letterSpacing: "0.1em" }}>
+            <ArrowLeft size={10} />
+            EXIT
+          </Link>
+        </div>
+      </div>
+
+      {/* ── MAIN AREA ────────────────────────────────────────────────────────── */}
+      <div className="flex-1 flex overflow-hidden">
+
+        {/* LEFT PANEL */}
+        <AnimatePresence>
+          {panelOpen && (
+            <motion.div
+              initial={{ width: 0, opacity: 0 }}
+              animate={{ width: 256, opacity: 1 }}
+              exit={{ width: 0, opacity: 0 }}
+              transition={{ duration: 0.22, ease: [0.22, 1, 0.36, 1] }}
+              className="flex-shrink-0 flex flex-col overflow-hidden"
+              style={{ borderRight: `1px solid ${C.border}`, background: C.panel }}
+            >
+              <div className="flex-1 overflow-y-auto" style={{ minWidth: 256 }}>
+
+                {/* ── Filters section ── */}
+                <div className="p-3 border-b" style={{ borderColor: C.borderDim }}>
+                  <p className="mb-2" style={{ fontFamily: "monospace", fontSize: 8, color: C.dim, letterSpacing: "0.2em" }}>OPERATIONAL FILTERS</p>
+
+                  {/* Severity */}
+                  <p className="mb-1.5" style={{ fontFamily: "monospace", fontSize: 7, color: C.dim, letterSpacing: "0.15em" }}>SEVERITY</p>
+                  <div className="flex flex-wrap gap-1 mb-3">
+                    {(["critical","high","medium","low"] as const).map((s) => (
+                      <Chip key={s} label={SEV[s].label} active={filters.severities.has(s)}
+                        accent={SEV[s].color} count={counts[s]}
+                        onClick={() => toggle("severities", s)} />
+                    ))}
+                  </div>
+
+                  {/* Status */}
+                  <p className="mb-1.5" style={{ fontFamily: "monospace", fontSize: 7, color: C.dim, letterSpacing: "0.15em" }}>STATUS</p>
+                  <div className="flex flex-wrap gap-1 mb-3">
+                    {(["open","assigned","in_progress","resolved"] as const).map((s) => (
+                      <Chip key={s} label={STATUS_LABELS[s]} active={filters.statuses.has(s)}
+                        accent={s === "resolved" ? C.green : s === "open" ? C.red : s === "in_progress" ? C.accent : C.amber}
+                        count={s === "open" ? counts.open : s === "assigned" ? counts.assigned : s === "in_progress" ? counts.inProg : counts.resolved}
+                        onClick={() => toggle("statuses", s)} />
+                    ))}
+                  </div>
+
+                  {/* Time window */}
+                  <p className="mb-1.5" style={{ fontFamily: "monospace", fontSize: 7, color: C.dim, letterSpacing: "0.15em" }}>TIME WINDOW</p>
+                  <div className="flex flex-wrap gap-1 mb-3">
+                    {(["all","today","week","month"] as const).map((d) => (
+                      <Chip key={d} label={d.toUpperCase()} active={filters.dateRange === d} accent={C.accent}
+                        onClick={() => setFilters((p) => ({ ...p, dateRange: d }))} />
+                    ))}
+                  </div>
+
+                  {/* Department */}
+                  {departments.length > 0 && (
+                    <>
+                      <p className="mb-1.5" style={{ fontFamily: "monospace", fontSize: 7, color: C.dim, letterSpacing: "0.15em" }}>DEPARTMENT</p>
+                      <div className="flex flex-col gap-0.5 mb-1" style={{ maxHeight: 96, overflowY: "auto" }}>
+                        {departments.map((dept) => (
+                          <button key={dept} onClick={() => toggle("departments", dept)}
+                            className="flex items-center gap-2 px-2 py-1 rounded text-left transition-all"
+                            style={{
+                              background: filters.departments.has(dept) ? `${C.accent}14` : "transparent",
+                              border: `1px solid ${filters.departments.has(dept) ? `${C.accent}40` : "transparent"}`,
+                            }}>
+                            <div className="w-1.5 h-1.5 rounded-full flex-shrink-0"
+                              style={{ background: filters.departments.has(dept) ? C.accent : C.borderDim }} />
+                            <span className="truncate" style={{ fontFamily: "monospace", fontSize: 9, color: filters.departments.has(dept) ? C.accent : C.mid }}>
+                              {dept}
+                            </span>
+                          </button>
+                        ))}
+                      </div>
+                    </>
+                  )}
+                </div>
+
+                {/* ── Radius draw section ── */}
+                <div className="p-3 border-b" style={{ borderColor: C.borderDim }}>
+                  <p className="mb-2" style={{ fontFamily: "monospace", fontSize: 8, color: C.dim, letterSpacing: "0.2em" }}>RADIUS ANALYSIS</p>
+                  {!radiusCenter ? (
+                    <button onClick={() => setDrawMode(true)}
+                      className="w-full flex items-center justify-center gap-1.5 py-2 rounded-lg transition-all"
+                      style={{
+                        border: `1px dashed ${drawMode ? C.accent : C.border}`,
+                        background: drawMode ? `${C.accent}10` : "transparent",
+                        color: drawMode ? C.accent : C.dim,
+                        fontFamily: "monospace", fontSize: 9, fontWeight: "bold", letterSpacing: "0.1em",
+                      }}>
+                      <Crosshair size={11} />
+                      {drawMode ? "CLICK MAP TO SET CENTER" : "DRAW RADIUS"}
+                    </button>
+                  ) : (
+                    <div>
+                      <div className="flex items-center justify-between mb-2">
+                        <div className="flex items-center gap-1.5">
+                          <div className="w-1.5 h-1.5 rounded-full" style={{ background: C.accent }} />
+                          <span style={{ fontFamily: "monospace", fontSize: 9, color: C.accent, fontWeight: "bold" }}>RADIUS ACTIVE</span>
+                        </div>
+                        <button onClick={clearRadius}><Trash2 size={11} style={{ color: C.dim }} /></button>
+                      </div>
+                      <div className="flex items-center justify-between mb-1">
+                        <span style={{ fontFamily: "monospace", fontSize: 8, color: C.mid }}>RADIUS</span>
+                        <span style={{ fontFamily: "monospace", fontSize: 11, color: C.accent, fontWeight: "bold" }}>{radiusKm} km</span>
+                      </div>
+                      <input type="range" min={1} max={20} step={0.5} value={radiusKm}
+                        onChange={(e) => setRadiusKm(Number(e.target.value))}
+                        className="w-full accent-[#00BFFF]"
+                        style={{ accentColor: C.accent }} />
+                      <p style={{ fontFamily: "monospace", fontSize: 8, color: C.dim, marginTop: 4 }}>
+                        <span style={{ color: C.accent, fontWeight: "bold" }}>{filteredIssues.length}</span> incidents inside
+                      </p>
+                    </div>
+                  )}
+                </div>
+
+                {/* ── Intelligence feed ── */}
+                <div className="p-3">
+                  <div className="flex items-center justify-between mb-2">
+                    <p style={{ fontFamily: "monospace", fontSize: 8, color: C.dim, letterSpacing: "0.2em" }}>INTELLIGENCE FEED</p>
+                    <span className="rounded-full px-1.5 py-0.5" style={{ fontFamily: "monospace", fontSize: 8, color: C.accent, border: `1px solid ${C.accent}40`, background: `${C.accent}10` }}>
+                      {filteredIssues.length}
+                    </span>
+                  </div>
+
+                  {issuesLoading ? (
+                    <div className="flex items-center justify-center gap-2 py-8">
+                      <div className="w-2 h-2 rounded-full animate-pulse" style={{ background: C.accent }} />
+                      <span style={{ fontFamily: "monospace", fontSize: 9, color: C.dim }}>SYNCING DATA</span>
+                    </div>
+                  ) : filteredIssues.length === 0 ? (
+                    <div className="flex flex-col items-center gap-2 py-8">
+                      <AlertCircle size={20} style={{ color: C.borderDim }} />
+                      <p style={{ fontFamily: "monospace", fontSize: 8, color: C.dim, letterSpacing: "0.15em" }}>NO INCIDENTS FOUND</p>
+                      <p style={{ fontFamily: "monospace", fontSize: 7, color: C.borderDim }}>ADJUST FILTERS</p>
+                    </div>
+                  ) : (
+                    <div className="flex flex-col gap-0.5">
+                      {filteredIssues.slice(0, 80).map((issue) => {
+                        const sevColor = SEV[issue.severity as keyof typeof SEV]?.color ?? C.amber;
+                        const isSelected = selectedId === issue.id;
+                        return (
+                          <button key={issue.id} onClick={() => setSelectedId(isSelected ? null : issue.id)}
+                            className="flex items-start gap-2 p-2 rounded text-left transition-all w-full"
+                            style={{
+                              background: isSelected ? `${C.accent}10` : "transparent",
+                              border: `1px solid ${isSelected ? `${C.accent}30` : "transparent"}`,
+                              borderLeft: `2px solid ${isSelected ? C.accent : sevColor}`,
+                            }}>
+                            <div className="flex-1 min-w-0">
+                              <p className="truncate text-xs font-medium" style={{ color: C.text }}>{issue.title}</p>
+                              <p className="truncate" style={{ fontFamily: "monospace", fontSize: 8, color: C.dim, marginTop: 1 }}>
+                                {issue.location?.address || issue.locationAddress || "—"}
+                              </p>
+                              <div className="flex items-center gap-1.5 mt-1">
+                                <span className="rounded px-1 py-0.5" style={{ fontFamily: "monospace", fontSize: 7, fontWeight: "bold", color: sevColor, border: `1px solid ${sevColor}30`, background: `${sevColor}12` }}>
+                                  {issue.severity?.toUpperCase()}
+                                </span>
+                                <span style={{ fontFamily: "monospace", fontSize: 8, color: C.borderDim }}>
+                                  {relTime(issue.reportedAt)}
+                                </span>
+                              </div>
+                            </div>
+                            <ChevronRight size={11} style={{ color: C.borderDim, flexShrink: 0, marginTop: 4 }} />
+                          </button>
+                        );
+                      })}
+                      {filteredIssues.length > 80 && (
+                        <p className="text-center py-2" style={{ fontFamily: "monospace", fontSize: 8, color: C.dim }}>
+                          +{filteredIssues.length - 80} more — narrow filters
+                        </p>
+                      )}
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Panel footer metrics */}
+              <div className="flex-shrink-0 p-3 border-t" style={{ borderColor: C.border }}>
+                <div className="grid grid-cols-3 gap-1.5">
+                  {[
+                    { label: "CRITICAL", val: counts.critical, color: C.red },
+                    { label: "ACTIVE",   val: counts.open,     color: C.amber },
+                    { label: "RESOLVED", val: counts.resolved, color: C.green },
+                  ].map((s) => (
+                    <div key={s.label} className="rounded-lg p-2 text-center" style={{ background: C.card, border: `1px solid ${C.borderDim}` }}>
+                      <p style={{ fontFamily: "monospace", fontSize: 14, fontWeight: "bold", color: s.color }}>{s.val}</p>
+                      <p style={{ fontFamily: "monospace", fontSize: 7, color: C.dim, letterSpacing: "0.1em" }}>{s.label}</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* ── MAP AREA ─────────────────────────────────────────────────────── */}
+        <div className="flex-1 relative overflow-hidden">
+
+          {/* Map */}
+          <div className="absolute inset-0" style={{ cursor: drawMode ? "crosshair" : "default" }}>
+            <WardIntelligenceMap
+              issues={filteredIssues}
+              selectedId={selectedId}
+              onSelectIssue={setSelectedId}
+              mapMode={mapMode}
+              radiusFilter={radiusFilter}
+              drawMode={drawMode}
+              onMapClick={handleMapClick}
             />
           </div>
 
-          {/* Filters */}
-          <div className="flex items-center gap-2">
-            <Filter size={12} className="text-[#9A9AA4]" />
-            {(["all", "critical", "medium", "resolved"] as const).map((f) => {
-              const color = f === "critical" ? "#D4726A" : f === "medium" ? "#C8A87A" : f === "resolved" ? "#7A9E6E" : "#5A5A62";
-              const bg = f === "critical" ? "#FAECEA" : f === "medium" ? "#FAF0E0" : f === "resolved" ? "#EAF2E6" : "";
-              return (
-                <button
-                  key={f}
-                  onClick={() => setFilter(f)}
-                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-medium transition-all ${
-                    filter === f
-                      ? "shadow-sm"
-                      : "hover:bg-[#F5F4F1] text-[#9A9AA4]"
-                  }`}
-                  style={filter === f ? { background: bg || "#F5F4F1", color } : {}}
-                >
-                  {f !== "all" && (
-                    <div className="w-2 h-2 rounded-full" style={{ background: color }} />
-                  )}
-                  <span className="capitalize">{f}</span>
-                  {f !== "all" && (
-                    <span className="text-[9px] opacity-70">
-                      ({f === "critical" ? counts.critical : f === "medium" ? counts.medium : counts.resolved})
-                    </span>
-                  )}
+          {/* Draw mode instruction banner */}
+          <AnimatePresence>
+            {drawMode && (
+              <motion.div
+                initial={{ opacity: 0, y: -16 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -16 }}
+                className="absolute top-3 left-1/2 -translate-x-1/2 z-20 flex items-center gap-2 rounded-lg px-4 py-2 pointer-events-auto"
+                style={{ background: `${C.panel}F0`, border: `1px solid ${C.accent}40`, backdropFilter: "blur(8px)" }}
+              >
+                <div className="w-1.5 h-1.5 rounded-full animate-pulse" style={{ background: C.accent }} />
+                <span style={{ fontFamily: "monospace", fontSize: 9, color: C.accent, fontWeight: "bold", letterSpacing: "0.15em" }}>
+                  CLICK MAP TO SET RADIUS CENTER
+                </span>
+                <button onClick={() => setDrawMode(false)} className="ml-1">
+                  <X size={11} style={{ color: C.dim }} />
                 </button>
-              );
-            })}
+              </motion.div>
+            )}
+          </AnimatePresence>
+
+          {/* Issue Intel Card overlay */}
+          <AnimatePresence>
+            {selectedIssue && (
+              <IssueIntelCard issue={selectedIssue} onClose={() => setSelectedId(null)} />
+            )}
+          </AnimatePresence>
+
+          {/* Legend overlay — bottom-right */}
+          <div className="absolute bottom-3 right-3 z-10 rounded-xl p-3 pointer-events-none"
+            style={{ background: `${C.panel}E8`, border: `1px solid ${C.border}`, backdropFilter: "blur(8px)", minWidth: 130 }}>
+            <p className="mb-2" style={{ fontFamily: "monospace", fontSize: 7, color: C.dim, letterSpacing: "0.2em" }}>THREAT LEGEND</p>
+            {[
+              { color: C.red,    label: "CRITICAL", count: counts.critical },
+              { color: C.orange, label: "HIGH",     count: counts.high     },
+              { color: C.amber,  label: "MEDIUM",   count: counts.medium   },
+              { color: C.green,  label: "LOW/SAFE", count: counts.low + counts.resolved },
+            ].map((l) => (
+              <div key={l.label} className="flex items-center gap-2 mb-1">
+                <div className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: l.color, boxShadow: `0 0 6px ${l.color}80` }} />
+                <span style={{ fontFamily: "monospace", fontSize: 8, color: C.mid }}>{l.label}</span>
+                <span className="ml-auto" style={{ fontFamily: "monospace", fontSize: 9, fontWeight: "bold", color: l.color }}>{l.count}</span>
+              </div>
+            ))}
           </div>
 
-          <div className="ml-auto flex items-center gap-2">
-            <div className="flex items-center gap-1.5">
-              <span className="w-1.5 h-1.5 rounded-full bg-[#7A9E6E] pulse-dot" />
-              <span className="text-[10px] text-[#7A9E6E] font-medium">LIVE</span>
+          {/* Live counter — bottom-left */}
+          <div className="absolute bottom-3 left-3 z-10 flex flex-col gap-1 pointer-events-none">
+            <div className="flex items-center gap-2 rounded-lg px-3 py-1.5"
+              style={{ background: `${C.panel}E8`, border: `1px solid ${C.border}`, backdropFilter: "blur(8px)" }}>
+              <div className="w-1.5 h-1.5 rounded-full animate-pulse" style={{ background: C.accent }} />
+              <span style={{ fontFamily: "monospace", fontSize: 9, color: C.accent, fontWeight: "bold", letterSpacing: "0.1em" }}>
+                LIVE · {filteredIssues.length}/{issues.length} INCIDENTS
+              </span>
             </div>
-            <button className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-[#F5F4F1] text-xs text-[#5A5A62] hover:bg-[#EDE9E0] transition-all">
-              <Layers size={12} />
-              Layers
-            </button>
-            <Link
-              href="/report"
-              className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-[#1A1A1C] text-white text-xs font-medium hover:bg-[#2C2C2E] transition-all"
-            >
-              <Camera size={12} />
-              Report Issue
+            {radiusFilter && (
+              <div className="flex items-center gap-2 rounded-lg px-3 py-1.5"
+                style={{ background: `${C.panel}E8`, border: `1px solid ${C.accent}40` }}>
+                <Circle size={9} style={{ color: C.accent }} />
+                <span style={{ fontFamily: "monospace", fontSize: 9, color: C.accent, fontWeight: "bold" }}>
+                  RADIUS {radiusKm}KM · {filteredIssues.length} INSIDE
+                </span>
+              </div>
+            )}
+            <Link href="/report" className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 pointer-events-auto transition-all"
+              style={{ background: `${C.panel}E8`, border: `1px solid ${C.border}`, fontFamily: "monospace", fontSize: 9, color: C.mid, backdropFilter: "blur(8px)" }}>
+              <Camera size={10} />
+              REPORT INCIDENT
             </Link>
           </div>
-        </div>
 
-        {/* Map area + sidebar */}
-        <div className="flex-1 flex overflow-hidden">
-          {/* Map */}
-          <div className="flex-1 relative bg-[#F5F4F1] overflow-hidden">
-            <div className="w-full h-full p-4">
-              <WardMap onSelectMarker={setSelectedMarker} />
+          {/* Mode indicator - top left when panel closed */}
+          {!panelOpen && (
+            <div className="absolute top-3 left-3 z-10 rounded-lg px-3 py-1.5"
+              style={{ background: `${C.panel}E8`, border: `1px solid ${C.border}`, backdropFilter: "blur(8px)" }}>
+              <span style={{ fontFamily: "monospace", fontSize: 9, color: mapMode === "heatmap" ? C.red : mapMode === "cluster" ? C.accent : C.green, fontWeight: "bold", letterSpacing: "0.1em" }}>
+                {mapMode.toUpperCase()} MODE
+              </span>
             </div>
-
-            {/* Detail card overlay */}
-            <AnimatePresence>
-              {selectedMarker && (
-                <div className="absolute bottom-6 left-6 z-20">
-                  <DetailCard marker={selectedMarker} onClose={() => setSelectedMarker(null)} />
-                </div>
-              )}
-            </AnimatePresence>
-
-            {/* Legend */}
-            <div className="absolute top-6 right-6 glass rounded-2xl px-4 py-3 flex flex-col gap-2.5 z-10">
-              <span className="text-[9px] font-semibold text-[#9A9AA4] uppercase tracking-wider">Legend</span>
-              {[
-                { color: "#D4726A", label: "Critical", count: counts.critical },
-                { color: "#C8A87A", label: "Medium", count: counts.medium },
-                { color: "#7A9E6E", label: "Resolved", count: counts.resolved },
-              ].map((l) => (
-                <div key={l.label} className="flex items-center gap-2">
-                  <div className="w-3 h-3 rounded-full flex-shrink-0" style={{ background: l.color }} />
-                  <span className="text-[10px] text-[#5A5A62] font-medium">{l.label}</span>
-                  <span className="ml-auto text-[10px] font-bold" style={{ color: l.color }}>{l.count}</span>
-                </div>
-              ))}
-            </div>
-
-            {/* Ward health scores overlay */}
-            <div className="absolute bottom-6 right-6 glass rounded-2xl p-3 z-10 max-w-[160px]">
-              <p className="text-[9px] font-semibold text-[#9A9AA4] uppercase tracking-wider mb-2">Ward Health</p>
-              {wardZones.map((z) => (
-                <div key={z.ward} className="flex items-center gap-2 mb-1.5">
-                  <span className="text-[9px] text-[#5A5A62] flex-1 truncate">{z.ward}</span>
-                  <div
-                    className="text-[9px] font-bold px-1.5 py-0.5 rounded-full"
-                    style={{
-                      background: `${z.color}18`,
-                      color: z.color,
-                    }}
-                  >
-                    {z.score}
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          {/* Issues sidebar */}
-          <div className="w-72 bg-white border-l border-[#E4E2DC] flex flex-col overflow-hidden hidden lg:flex">
-            <div className="px-4 py-3 border-b border-[#E4E2DC]">
-              <span className="text-xs font-semibold text-[#1A1A1C]">Active Issues</span>
-              <span className="ml-2 text-[10px] text-[#9A9AA4]">{filteredMarkers.length} shown</span>
-            </div>
-            <div className="flex-1 overflow-y-auto divide-y divide-[#F5F4F1]">
-              {filteredMarkers.map((m) => {
-                const color = severityColor(m.severity);
-                return (
-                  <motion.button
-                    key={m.id}
-                    onClick={() => setSelectedMarker(m)}
-                    whileHover={{ backgroundColor: "#FAFAF8" }}
-                    className={`w-full px-4 py-3.5 flex items-start gap-3 text-left transition-colors ${
-                      selectedMarker?.id === m.id ? "bg-[#F8FAF6]" : ""
-                    }`}
-                  >
-                    <div
-                      className="w-7 h-7 rounded-xl flex items-center justify-center flex-shrink-0 mt-0.5"
-                      style={{ background: `${color}18` }}
-                    >
-                      <AlertTriangle size={12} style={{ color }} />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-xs font-semibold text-[#1A1A1C] truncate">{m.type}</p>
-                      <p className="text-[10px] text-[#9A9AA4] truncate">{m.location}</p>
-                      <div className="flex items-center gap-2 mt-1.5">
-                        <span
-                          className="text-[9px] font-medium px-1.5 py-0.5 rounded-full"
-                          style={{ background: `${color}18`, color }}
-                        >
-                          {m.ward}
-                        </span>
-                        <span className="text-[9px] text-[#B0ACA4]">{m.time}</span>
-                      </div>
-                    </div>
-                    <ChevronRight size={13} className="text-[#D0CCC8] flex-shrink-0 mt-1" />
-                  </motion.button>
-                );
-              })}
-            </div>
-
-            {/* Bottom summary */}
-            <div className="p-4 border-t border-[#E4E2DC]">
-              <div className="grid grid-cols-3 gap-2">
-                {[
-                  { label: "Critical", value: counts.critical, color: "#D4726A" },
-                  { label: "Open", value: counts.medium, color: "#C8A87A" },
-                  { label: "Done", value: counts.resolved, color: "#7A9E6E" },
-                ].map((s) => (
-                  <div key={s.label} className="text-center">
-                    <p className="text-lg font-bold" style={{ color: s.color }}>{s.value}</p>
-                    <p className="text-[9px] text-[#9A9AA4]">{s.label}</p>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
+          )}
         </div>
       </div>
     </div>

@@ -1,42 +1,95 @@
 "use client";
 
-import { useState, useRef, useEffect, useCallback } from "react";
+import { useState, useRef, useEffect, useCallback, useMemo } from "react";
 import Link from "next/link";
 import { motion, AnimatePresence } from "framer-motion";
 import Navbar from "@/components/Navbar";
 import {
   Camera, Upload, Brain, CheckCircle2, AlertTriangle, IndianRupee,
   Users, Shield, Building2, ArrowRight, Zap, MapPin, BarChart3,
-  X, Loader2, Star, TrendingUp, Cpu, Eye, Activity, Sparkles,
+  X, Loader2, Star, TrendingUp, Cpu, Eye, Sparkles,
+  Navigation, Copy, ExternalLink, RotateCcw, FileImage,
 } from "lucide-react";
-import { useReportFlow, type AnalysisResult } from "@/lib/hooks/useReportFlow";
+import { useReportFlow, type AnalysisData } from "@/lib/hooks/useReportFlow";
 import { useRouter } from "next/navigation";
 
-type Stage = "upload" | "analyzing" | "results";
+type Stage = "upload" | "preview" | "analyzing" | "review" | "success";
 
-/* ─── STAGGER ──────────────────────────────────────────── */
-const containerV = { hidden:{}, visible:{ transition:{ staggerChildren:0.08 } } };
+/* ─── ANIMATION VARIANTS ──────────────────────────────────────────────────── */
+const containerV = {
+  hidden: {},
+  visible: { transition: { staggerChildren: 0.08 } },
+};
 const cardV = {
-  hidden:  { opacity:0, y:24, scale:0.95 },
-  visible: { opacity:1, y:0,  scale:1, transition:{ duration:0.5, ease:[0.22,1,0.36,1] as [number,number,number,number] } },
+  hidden:  { opacity: 0, y: 24, scale: 0.97 },
+  visible: { opacity: 1, y: 0,  scale: 1, transition: { duration: 0.5, ease: [0.22, 1, 0.36, 1] as [number,number,number,number] } },
 };
 
-/* ─── UPLOAD STAGE ─────────────────────────────────────── */
-function UploadStage({ onUpload, error }: { onUpload: (file: File) => void; error: string | null }) {
+/* ─── STEPPER ─────────────────────────────────────────────────────────────── */
+const STEPS = ["Upload", "Analysis", "Review", "Done"] as const;
+
+function stageToStepIndex(stage: Stage): number {
+  if (stage === "upload" || stage === "preview") return 0;
+  if (stage === "analyzing") return 1;
+  if (stage === "review") return 2;
+  return 3;
+}
+
+function Stepper({ stage }: { stage: Stage }) {
+  const current = stageToStepIndex(stage);
+  return (
+    <div className="flex items-center justify-center mb-16">
+      {STEPS.map((label, i) => {
+        const done = i < current;
+        const active = i === current;
+        return (
+          <div key={label} className="flex items-center gap-3">
+            <div className="flex items-center gap-2.5">
+              <motion.div
+                animate={active ? { scale: [1, 1.08, 1] } : {}}
+                transition={{ duration: 1.8, repeat: Infinity }}
+                className={`w-8 h-8 rounded-xl flex items-center justify-center text-xs font-bold transition-all ${
+                  done   ? "bg-[#7A9E6E] text-white"
+                  : active ? "bg-[#1A1A1C] text-white"
+                           : "bg-[#F0EDE8] text-[#9A9AA4]"
+                }`}
+              >
+                {done ? <CheckCircle2 size={14} /> : i + 1}
+              </motion.div>
+              <span className={`text-xs font-bold transition-all hidden sm:block ${active ? "text-[#1A1A1C]" : "text-[#9A9AA4]"}`}>
+                {label}
+              </span>
+            </div>
+            {i < STEPS.length - 1 && (
+              <div className="w-12 sm:w-16 h-px mx-2 bg-[#E4E2DC] relative overflow-hidden">
+                {done && (
+                  <motion.div
+                    className="absolute inset-0 bg-[#7A9E6E]"
+                    initial={{ x: "-100%" }}
+                    animate={{ x: 0 }}
+                    transition={{ duration: 0.4 }}
+                  />
+                )}
+              </div>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+/* ─── UPLOAD STAGE ────────────────────────────────────────────────────────── */
+function UploadStage({ onUpload }: { onUpload: (file: File) => void }) {
   const [drag, setDrag] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
   const handleFile = useCallback((file: File | undefined) => {
-    if (file) onUpload(file);
+    if (file && file.type.startsWith("image/")) onUpload(file);
   }, [onUpload]);
 
   return (
-    <motion.div
-      className="max-w-2xl mx-auto"
-      variants={containerV}
-      initial="hidden"
-      animate="visible"
-    >
+    <motion.div className="max-w-2xl mx-auto" variants={containerV} initial="hidden" animate="visible">
       <motion.div variants={cardV} className="text-center mb-10">
         <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-[#EAF2E6] border border-[#C8DFC0] mb-6">
           <Cpu size={12} className="text-[#7A9E6E]" />
@@ -45,19 +98,9 @@ function UploadStage({ onUpload, error }: { onUpload: (file: File) => void; erro
         </div>
         <h1 className="text-5xl font-serif text-[#1A1A1C] mb-4">Report a civic issue</h1>
         <p className="text-[#9A9AA4] text-base leading-relaxed max-w-md mx-auto">
-          Upload one photo. Five AI agents will analyze, quantify, and route your report in under 3 seconds.
+          Upload one photo. Five AI agents analyze, quantify, and route your report in seconds.
         </p>
       </motion.div>
-
-      {error && (
-        <motion.div
-          initial={{ opacity: 0, y: -8 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="mb-6 px-4 py-3 rounded-2xl bg-[#FAECEA] border border-[#F0C0BC] text-sm text-[#B05050] font-medium text-center"
-        >
-          {error}
-        </motion.div>
-      )}
 
       {/* Drop zone */}
       <motion.div
@@ -69,24 +112,15 @@ function UploadStage({ onUpload, error }: { onUpload: (file: File) => void; erro
         className="relative cursor-pointer group"
         onClick={() => inputRef.current?.click()}
       >
-        <input
-          ref={inputRef}
-          type="file"
-          accept="image/*"
-          className="hidden"
-          onChange={(e) => handleFile(e.target.files?.[0])}
-        />
-        <div
-          className={`relative overflow-hidden rounded-3xl border-2 border-dashed p-16 flex flex-col items-center gap-6 transition-all duration-300 ${
-            drag
-              ? "border-[#7A9E6E] bg-[#EAF2E6]/60"
-              : "border-[#D4D0C8] bg-white hover:border-[#7A9E6E]/60 hover:bg-[#F8FAF6]"
-          }`}
-        >
-          {/* Animated background grid */}
+        <input ref={inputRef} type="file" accept="image/*" className="hidden"
+          onChange={(e) => handleFile(e.target.files?.[0])} />
+        <div className={`relative overflow-hidden rounded-3xl border-2 border-dashed p-16 flex flex-col items-center gap-6 transition-all duration-300 ${
+          drag
+            ? "border-[#7A9E6E] bg-[#EAF2E6]/60"
+            : "border-[#D4D0C8] bg-white hover:border-[#7A9E6E]/80 hover:bg-[#F8FAF6] hover:shadow-[0_0_32px_rgba(122,158,110,0.12)]"
+        }`}>
           <div className="absolute inset-0 grid-lines opacity-30" />
 
-          {/* Center icon */}
           <motion.div
             className={`relative w-24 h-24 rounded-3xl flex items-center justify-center transition-all duration-300 ${
               drag ? "bg-[#7A9E6E]" : "bg-[#F5F4F1] group-hover:bg-[#EAF2E6]"
@@ -94,7 +128,6 @@ function UploadStage({ onUpload, error }: { onUpload: (file: File) => void; erro
             whileHover={{ rotate: [0, -5, 5, 0], transition: { duration: 0.4 } }}
           >
             <Camera size={36} className={`transition-colors ${drag ? "text-white" : "text-[#B0ACA4] group-hover:text-[#7A9E6E]"}`} />
-            {/* Orbiting dot */}
             <motion.div
               className="absolute w-2.5 h-2.5 rounded-full bg-[#7A9E6E]"
               animate={{ rotate: 360 }}
@@ -107,7 +140,7 @@ function UploadStage({ onUpload, error }: { onUpload: (file: File) => void; erro
             <p className="text-lg font-bold text-[#1A1A1C] mb-1">
               {drag ? "Drop to analyze" : "Drop your photo here"}
             </p>
-            <p className="text-sm text-[#9A9AA4]">JPG, PNG, HEIC · up to 20MB</p>
+            <p className="text-sm text-[#9A9AA4]">JPG, PNG, HEIC · up to 20 MB</p>
           </div>
 
           <div className="flex items-center gap-4">
@@ -122,7 +155,6 @@ function UploadStage({ onUpload, error }: { onUpload: (file: File) => void; erro
             </div>
           </div>
 
-          {/* AI capability chips */}
           <div className="flex flex-wrap gap-2 justify-center">
             {["Object Detection","Severity Analysis","Economic Modeling","Auto-Routing","Risk Prediction"].map((cap) => (
               <span key={cap} className="text-[9px] font-bold text-[#9A9AA4] bg-[#F5F4F1] px-2.5 py-1 rounded-full uppercase tracking-wide">
@@ -133,17 +165,17 @@ function UploadStage({ onUpload, error }: { onUpload: (file: File) => void; erro
         </div>
       </motion.div>
 
-      {/* Quick report categories */}
+      {/* Quick categories */}
       <motion.div variants={cardV} className="mt-6">
         <p className="text-[10px] font-bold text-[#9A9AA4] uppercase tracking-widest mb-3">Quick Report</p>
         <div className="grid grid-cols-3 gap-2">
           {[
-            { emoji:"🕳️", label:"Pothole",      color:"#FAECEA" },
-            { emoji:"💧", label:"Flooding",     color:"#E8EFF6" },
-            { emoji:"💡", label:"Streetlight",  color:"#FAF0E0" },
-            { emoji:"🗑️", label:"Garbage",      color:"#F2F3E0" },
-            { emoji:"🌳", label:"Tree Fall",    color:"#EAF2E6" },
-            { emoji:"🚰", label:"Water Leak",   color:"#E4F2F2" },
+            { emoji: "🕳️", label: "Pothole" },
+            { emoji: "💧", label: "Flooding" },
+            { emoji: "💡", label: "Streetlight" },
+            { emoji: "🗑️", label: "Garbage" },
+            { emoji: "🌳", label: "Tree Fall" },
+            { emoji: "🚰", label: "Water Leak" },
           ].map((cat) => (
             <motion.button
               key={cat.label}
@@ -162,61 +194,181 @@ function UploadStage({ onUpload, error }: { onUpload: (file: File) => void; erro
   );
 }
 
-/* ─── ANALYZING STAGE ──────────────────────────────────── */
+/* ─── PREVIEW STAGE ───────────────────────────────────────────────────────── */
+function PreviewStage({
+  file,
+  previewUrl,
+  onConfirm,
+  onCancel,
+}: {
+  file: File;
+  previewUrl: string;
+  onConfirm: () => void;
+  onCancel: () => void;
+}) {
+  const [locating, setLocating] = useState(true);
+
+  // Simulate location pre-detection animation (actual GPS fires during analysis)
+  useEffect(() => {
+    const t = setTimeout(() => setLocating(false), 2200);
+    return () => clearTimeout(t);
+  }, []);
+
+  const sizeStr = file.size > 1_000_000
+    ? `${(file.size / 1_000_000).toFixed(1)} MB`
+    : `${Math.round(file.size / 1_000)} KB`;
+
+  return (
+    <motion.div
+      className="max-w-2xl mx-auto"
+      variants={containerV}
+      initial="hidden"
+      animate="visible"
+    >
+      <motion.div variants={cardV} className="text-center mb-8">
+        <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-[#E8EFF6] border border-[#C0D4E8] mb-4">
+          <Navigation size={12} className="text-[#6A88AA]" />
+          <span className="text-[11px] font-bold text-[#4A6A88] uppercase tracking-wider">Photo Ready</span>
+        </div>
+        <h2 className="text-4xl font-serif text-[#1A1A1C] mb-2">Review your photo</h2>
+        <p className="text-[#9A9AA4] text-sm">Confirm this photo before AI analysis begins</p>
+      </motion.div>
+
+      {/* Image card */}
+      <motion.div variants={cardV} className="bg-white rounded-3xl border border-[#E4E2DC] overflow-hidden card-1 mb-4">
+        {/* Image */}
+        <div className="relative h-72 bg-[#F0EDE8]">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={previewUrl}
+            alt="Selected photo"
+            className="absolute inset-0 w-full h-full object-cover"
+          />
+          {/* Subtle scan overlay */}
+          <motion.div
+            className="absolute inset-0 pointer-events-none"
+            style={{ background: "linear-gradient(to bottom, transparent 0%, rgba(122,158,110,0.08) 50%, transparent 100%)" }}
+            animate={{ y: ["-100%", "200%"] }}
+            transition={{ duration: 2.5, repeat: Infinity, ease: "linear", repeatDelay: 0.5 }}
+          />
+          {/* Corner reticles */}
+          {[
+            "top-3 left-3 border-t-2 border-l-2",
+            "top-3 right-3 border-t-2 border-r-2",
+            "bottom-3 left-3 border-b-2 border-l-2",
+            "bottom-3 right-3 border-b-2 border-r-2",
+          ].map((cls, i) => (
+            <motion.div
+              key={i}
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              transition={{ delay: 0.2 + i * 0.08 }}
+              className={`absolute w-5 h-5 border-[#7A9E6E] rounded-sm ${cls}`}
+            />
+          ))}
+        </div>
+
+        {/* File info row */}
+        <div className="flex items-center justify-between px-5 py-4 border-t border-[#F0EDE8]">
+          <div className="flex items-center gap-3">
+            <div className="w-9 h-9 rounded-xl bg-[#F0EDE8] flex items-center justify-center">
+              <FileImage size={16} className="text-[#9A9AA4]" />
+            </div>
+            <div>
+              <p className="text-sm font-semibold text-[#1A1A1C] truncate max-w-[200px]">{file.name}</p>
+              <p className="text-xs text-[#9A9AA4]">{sizeStr} · {file.type.split("/")[1]?.toUpperCase()}</p>
+            </div>
+          </div>
+
+          {/* Location status */}
+          <div className="flex items-center gap-2">
+            {locating ? (
+              <>
+                <motion.div
+                  className="w-2 h-2 rounded-full bg-[#C8A87A]"
+                  animate={{ opacity: [1, 0.3, 1] }}
+                  transition={{ duration: 1, repeat: Infinity }}
+                />
+                <span className="text-xs text-[#C8A87A] font-medium">Detecting location</span>
+              </>
+            ) : (
+              <>
+                <div className="w-2 h-2 rounded-full bg-[#7A9E6E]" />
+                <span className="text-xs text-[#7A9E6E] font-medium">Location ready</span>
+              </>
+            )}
+          </div>
+        </div>
+      </motion.div>
+
+      {/* CTAs */}
+      <motion.div variants={cardV} className="flex flex-col sm:flex-row gap-3">
+        <motion.button
+          whileHover={{ scale: 1.02 }}
+          whileTap={{ scale: 0.97 }}
+          onClick={onConfirm}
+          className="flex-1 flex items-center justify-center gap-2.5 py-4 bg-[#1A1A1C] text-white rounded-2xl font-bold text-sm hover:bg-[#2C2C2E] transition-all card-2"
+        >
+          <Brain size={16} />
+          Start AI Analysis
+          <ArrowRight size={15} />
+        </motion.button>
+        <motion.button
+          whileHover={{ scale: 1.02 }}
+          whileTap={{ scale: 0.97 }}
+          onClick={onCancel}
+          className="flex items-center justify-center gap-2 px-6 py-4 rounded-2xl font-semibold text-sm text-[#5A5A62] border border-[#E4E2DC] hover:bg-white hover:border-[#D0CCC4] transition-all"
+        >
+          <RotateCcw size={14} />
+          Choose different photo
+        </motion.button>
+      </motion.div>
+    </motion.div>
+  );
+}
+
+/* ─── ANALYZING STAGE ─────────────────────────────────────────────────────── */
 const analyzeSteps = [
-  { label: "Processing image",          icon: Camera,      },
-  { label: "Detecting issue type",      icon: Eye,         },
-  { label: "Classifying severity",      icon: Zap,         },
-  { label: "Computing economic impact", icon: IndianRupee, },
-  { label: "Mapping affected areas",    icon: MapPin,      },
-  { label: "Routing to department",     icon: Building2,   },
+  { label: "Processing image",           icon: Camera      },
+  { label: "Detecting your location",    icon: Navigation  },
+  { label: "AI Vision analysis",         icon: Eye         },
+  { label: "Computing economic impact",  icon: IndianRupee },
+  { label: "Mapping affected areas",     icon: MapPin      },
+  { label: "Routing to department",      icon: Building2   },
 ];
 
-function AnalyzingStage({ activeStep }: { activeStep: number | null }) {
-  // Mirror real progress if available, otherwise auto-advance for visual polish
-  const [activeLine, setActiveLine] = useState(
-    activeStep !== null ? Math.max(activeStep, 0) : 0,
-  );
+function AnalyzingStage({ analyzeStep }: { analyzeStep: number | null }) {
+  const [activeLine, setActiveLine] = useState(analyzeStep !== null ? Math.max(analyzeStep, 0) : 0);
 
   useEffect(() => {
-    if (activeStep !== null) {
-      setActiveLine(activeStep);
+    if (analyzeStep !== null) {
+      setActiveLine(analyzeStep);
       return;
     }
-    const t = setInterval(
-      () => setActiveLine((l) => Math.min(l + 1, analyzeSteps.length)),
-      600,
-    );
+    const t = setInterval(() => setActiveLine((l) => Math.min(l + 1, analyzeSteps.length)), 600);
     return () => clearInterval(t);
-  }, [activeStep]);
+  }, [analyzeStep]);
 
   return (
     <div className="max-w-md mx-auto text-center">
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        className="mb-10"
-      >
+      <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="mb-10">
         <h2 className="text-4xl font-serif text-[#1A1A1C] mb-3">Analyzing your photo</h2>
         <p className="text-[#9A9AA4] text-sm">Five AI agents working in parallel</p>
       </motion.div>
 
-      {/* Central animation */}
+      {/* Brain animation */}
       <div className="flex justify-center mb-10">
         <div className="relative">
-          {[1,2,3].map((i) => (
+          {[1, 2, 3].map((i) => (
             <motion.div
               key={i}
               className="absolute inset-0 rounded-full bg-[#7A9E6E]"
-              animate={{ scale: [1, 1.5 + i*0.3, 1], opacity: [0.2, 0, 0.2] }}
+              animate={{ scale: [1, 1.5 + i * 0.3, 1], opacity: [0.2, 0, 0.2] }}
               transition={{ duration: 2.5, repeat: Infinity, delay: i * 0.5 }}
             />
           ))}
           <div className="relative w-24 h-24 rounded-3xl bg-[#7A9E6E] flex items-center justify-center shadow-xl shadow-[#7A9E6E]/30">
-            <motion.div
-              animate={{ rotate: 360 }}
-              transition={{ duration: 3, repeat: Infinity, ease: "linear" }}
-            >
+            <motion.div animate={{ rotate: 360 }} transition={{ duration: 3, repeat: Infinity, ease: "linear" }}>
               <Brain size={36} className="text-white" />
             </motion.div>
           </div>
@@ -244,12 +396,8 @@ function AnalyzingStage({ activeStep }: { activeStep: number | null }) {
               }`}
             >
               {isDone ? (
-                <motion.div
-                  initial={{ scale: 0 }}
-                  animate={{ scale: 1 }}
-                  transition={{ type: "spring", stiffness: 300 }}
-                  className="w-7 h-7 rounded-xl bg-[#EAF2E6] flex items-center justify-center flex-shrink-0"
-                >
+                <motion.div initial={{ scale: 0 }} animate={{ scale: 1 }} transition={{ type: "spring", stiffness: 300 }}
+                  className="w-7 h-7 rounded-xl bg-[#EAF2E6] flex items-center justify-center flex-shrink-0">
                   <CheckCircle2 size={14} className="text-[#7A9E6E]" />
                 </motion.div>
               ) : isCurrent ? (
@@ -267,20 +415,14 @@ function AnalyzingStage({ activeStep }: { activeStep: number | null }) {
                 {step.label}
               </span>
               {isDone && (
-                <motion.span
-                  initial={{ opacity: 0, x: 8 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  className="ml-auto text-[10px] font-bold text-[#7A9E6E] bg-[#EAF2E6] px-2 py-0.5 rounded-full"
-                >
+                <motion.span initial={{ opacity: 0, x: 8 }} animate={{ opacity: 1, x: 0 }}
+                  className="ml-auto text-[10px] font-bold text-[#7A9E6E] bg-[#EAF2E6] px-2 py-0.5 rounded-full">
                   Done
                 </motion.span>
               )}
               {isCurrent && (
-                <motion.span
-                  animate={{ opacity: [1, 0.4, 1] }}
-                  transition={{ duration: 1, repeat: Infinity }}
-                  className="ml-auto text-[10px] font-bold text-[#C8A87A] bg-[#FAF0E0] px-2 py-0.5 rounded-full"
-                >
+                <motion.span animate={{ opacity: [1, 0.4, 1] }} transition={{ duration: 1, repeat: Infinity }}
+                  className="ml-auto text-[10px] font-bold text-[#C8A87A] bg-[#FAF0E0] px-2 py-0.5 rounded-full">
                   Processing
                 </motion.span>
               )}
@@ -289,22 +431,13 @@ function AnalyzingStage({ activeStep }: { activeStep: number | null }) {
         })}
       </div>
 
-      {/* Agents active row */}
-      <motion.div
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        transition={{ delay: 0.8 }}
-        className="mt-6 flex items-center justify-center gap-2"
-      >
+      <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.8 }}
+        className="mt-6 flex items-center justify-center gap-2 flex-wrap">
         <span className="text-[10px] text-[#9A9AA4]">Active agents:</span>
-        {["Vision AI","Analysis AI","Economics AI","Router AI","Alert AI"].map((a, i) => (
-          <motion.span
-            key={a}
-            initial={{ scale: 0 }}
-            animate={{ scale: 1 }}
+        {["Vision AI", "Location AI", "Analysis AI", "Economics AI", "Router AI"].map((a, i) => (
+          <motion.span key={a} initial={{ scale: 0 }} animate={{ scale: 1 }}
             transition={{ delay: 1 + i * 0.1, type: "spring" }}
-            className="text-[9px] font-bold text-[#7A9E6E] bg-[#EAF2E6] px-2 py-1 rounded-full"
-          >
+            className="text-[9px] font-bold text-[#7A9E6E] bg-[#EAF2E6] px-2 py-1 rounded-full">
             {a}
           </motion.span>
         ))}
@@ -313,7 +446,7 @@ function AnalyzingStage({ activeStep }: { activeStep: number | null }) {
   );
 }
 
-/* ─── RESULTS STAGE ────────────────────────────────────── */
+/* ─── REVIEW STAGE ────────────────────────────────────────────────────────── */
 function getSeverityLabel(score: number) {
   if (score >= 80) return "Critical threshold";
   if (score >= 60) return "High severity";
@@ -326,82 +459,65 @@ function getConfidenceLabel(pct: number) {
   return "Low confidence";
 }
 
-function ResultsStage({ result, onReset }: { result: AnalysisResult; onReset: () => void }) {
-  const router = useRouter();
-
-  const deptShort = result.dept.match(/\(([^)]+)\)/)?.[1] ?? result.dept.split(' ')[0];
-  const elapsedSec = (result.elapsedMs / 1000).toFixed(1);
-
-  const riskLabel = result.riskScore >= 80 ? "High Risk" : result.riskScore >= 50 ? "Medium Risk" : "Low Risk";
-  const urgencyShort = result.urgency.split(' ')[0]; // "Immediate", "Within", "Non-urgent"
-  const urgencyLine = result.urgency === "Immediate" ? "Right now" : result.urgency;
+function ReviewStage({
+  data,
+  previewUrl,
+  submitting,
+  onSubmit,
+  onReset,
+}: {
+  data: AnalysisData;
+  previewUrl: string;
+  submitting: boolean;
+  onSubmit: () => void;
+  onReset: () => void;
+}) {
+  const deptShort = data.dept.match(/\(([^)]+)\)/)?.[1] ?? data.dept.split(" ")[0];
+  const elapsedSec = (data.elapsedMs / 1000).toFixed(1);
+  const riskLabel = data.riskScore >= 80 ? "High Risk" : data.riskScore >= 50 ? "Medium Risk" : "Low Risk";
+  const filledBars = Math.round((data.riskScore / 100) * 25);
+  const urgencyShort = data.urgency.split(" ")[0];
 
   const analysisCards = [
-    { icon: AlertTriangle, label: "Issue Type",        value: result.type,                                      sub: result.subcategory,                      color: "#D4726A", bg: "#FAECEA", delay: 0 },
-    { icon: Zap,           label: "Severity Score",    value: `${result.severityScore}/100`,                    sub: getSeverityLabel(result.severityScore),   color: "#D4726A", bg: "#FAECEA", delay: 0.07 },
-    { icon: Brain,         label: "AI Confidence",     value: `${result.confidence}%`,                          sub: getConfidenceLabel(result.confidence),    color: "#6A88AA", bg: "#E8EFF6", delay: 0.14 },
-    { icon: IndianRupee,   label: "Economic Impact",   value: `${result.economic}/day`,                         sub: "Traffic delay costs",                   color: "#C8A87A", bg: "#FAF0E0", delay: 0.21 },
-    { icon: Users,         label: "Affected Citizens", value: `${result.affected.toLocaleString("en-IN")}+`,    sub: "Daily commuters",                       color: "#9A9C5E", bg: "#F2F3E0", delay: 0.28 },
-    { icon: Building2,     label: "Assigned Dept",     value: deptShort,                                        sub: "Auto-routed by AI",                     color: "#7A9E6E", bg: "#EAF2E6", delay: 0.35 },
-    { icon: Shield,        label: "Risk Score",        value: `${result.riskScore}/100`,                        sub: "Infrastructure risk",                   color: "#D4726A", bg: "#FAECEA", delay: 0.42 },
-    { icon: TrendingUp,    label: "Action",            value: urgencyShort,                                     sub: urgencyLine,                             color: "#5E9E9E", bg: "#E4F2F2", delay: 0.49 },
+    { icon: AlertTriangle, label: "Issue Type",        value: data.type,                                    sub: data.subcategory,                       color: "#D4726A", bg: "#FAECEA" },
+    { icon: Zap,           label: "Severity Score",    value: `${data.severityScore}/100`,                  sub: getSeverityLabel(data.severityScore),    color: "#D4726A", bg: "#FAECEA" },
+    { icon: Brain,         label: "AI Confidence",     value: `${data.confidence}%`,                        sub: getConfidenceLabel(data.confidence),     color: "#6A88AA", bg: "#E8EFF6" },
+    { icon: IndianRupee,   label: "Economic Impact",   value: `${data.economic}/day`,                       sub: "Estimated daily loss",                 color: "#C8A87A", bg: "#FAF0E0" },
+    { icon: Users,         label: "Affected Citizens", value: `${data.affected.toLocaleString("en-IN")}+`,  sub: "Daily commuters",                      color: "#9A9C5E", bg: "#F2F3E0" },
+    { icon: Building2,     label: "Assigned Dept",     value: deptShort,                                    sub: "Auto-routed by AI",                    color: "#7A9E6E", bg: "#EAF2E6" },
+    { icon: Shield,        label: "Risk Score",        value: `${data.riskScore}/100`,                      sub: "Infrastructure risk",                  color: "#D4726A", bg: "#FAECEA" },
+    { icon: TrendingUp,    label: "Urgency",           value: urgencyShort,                                 sub: data.urgency,                           color: "#5E9E9E", bg: "#E4F2F2" },
   ];
 
-  const filledBars = Math.round((result.riskScore / 100) * 25);
-
   return (
-    <motion.div
-      className="max-w-5xl mx-auto"
-      variants={containerV}
-      initial="hidden"
-      animate="visible"
-    >
+    <motion.div className="max-w-5xl mx-auto" variants={containerV} initial="hidden" animate="visible">
       {/* Header */}
       <motion.div variants={cardV} className="flex items-start justify-between mb-8">
         <div>
-          <motion.div
-            initial={{ scale: 0 }}
-            animate={{ scale: 1 }}
+          <motion.div initial={{ scale: 0 }} animate={{ scale: 1 }}
             transition={{ type: "spring", stiffness: 200, delay: 0.1 }}
-            className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-[#EAF2E6] border border-[#C8DFC0] mb-3"
-          >
+            className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-[#EAF2E6] border border-[#C8DFC0] mb-3">
             <CheckCircle2 size={12} className="text-[#7A9E6E]" />
-            <span className="text-[11px] font-bold text-[#5A7A50]">AI Analysis Complete · {elapsedSec} seconds</span>
+            <span className="text-[11px] font-bold text-[#5A7A50]">AI Analysis Complete · {elapsedSec}s</span>
           </motion.div>
           <h2 className="text-4xl font-serif text-[#1A1A1C]">Issue Intelligence Report</h2>
           <p className="text-sm text-[#9A9AA4] mt-1.5 flex items-center gap-1.5">
             <MapPin size={11} />
-            {result.location}
+            {data.location}
           </p>
         </div>
-        <motion.button
-          whileHover={{ scale: 1.05 }}
-          whileTap={{ scale: 0.95 }}
-          onClick={onReset}
-          className="p-2.5 rounded-xl bg-white border border-[#E4E2DC] hover:bg-[#F5F4F1] transition-all text-[#9A9AA4] hover:text-[#5A5A62]"
-        >
+        <motion.button whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }} onClick={onReset}
+          className="p-2.5 rounded-xl bg-white border border-[#E4E2DC] hover:bg-[#F5F4F1] transition-all text-[#9A9AA4] hover:text-[#5A5A62]">
           <X size={16} />
         </motion.button>
       </motion.div>
 
-      {/* Top section: Image + key metrics */}
+      {/* Image + key metrics */}
       <motion.div variants={cardV} className="bg-white rounded-3xl border border-[#E4E2DC] overflow-hidden mb-5 card-1">
         <div className="grid md:grid-cols-5">
-          {/* Image panel */}
-          <div className="md:col-span-2 relative h-56 md:h-72 bg-gradient-to-br from-[#F0EDE8] via-[#E8E4DC] to-[#DDD8D0] flex items-center justify-center overflow-hidden">
-            {result.imageUrl ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img
-                src={result.imageUrl}
-                alt="Reported issue"
-                className="absolute inset-0 w-full h-full object-cover"
-              />
-            ) : (
-              <div className="text-center opacity-40">
-                <Camera size={48} className="text-[#B0ACA4] mx-auto mb-2" />
-              </div>
-            )}
-            {/* Detection bounding box */}
+          <div className="md:col-span-2 relative h-56 md:h-72 bg-gradient-to-br from-[#F0EDE8] via-[#E8E4DC] to-[#DDD8D0] overflow-hidden">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src={previewUrl} alt="Reported issue" className="absolute inset-0 w-full h-full object-cover" />
             <motion.div
               className="absolute rounded-xl border-2 border-[#D4726A]"
               initial={{ opacity: 0, scale: 1.2 }}
@@ -409,97 +525,65 @@ function ResultsStage({ result, onReset }: { result: AnalysisResult; onReset: ()
               transition={{ delay: 0.3, duration: 0.4 }}
               style={{ top: "20%", left: "15%", right: "15%", bottom: "20%" }}
             />
-            {/* Detection label */}
-            <motion.div
-              initial={{ opacity: 0, y: -8 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.5 }}
-              className="absolute top-[20%] left-[15%] -translate-y-full mb-1"
-            >
+            <motion.div initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.5 }} className="absolute top-[18%] left-[14%]">
               <span className="bg-[#D4726A] text-white text-[9px] font-bold px-2.5 py-1 rounded-md">
-                {result.category.toUpperCase().replace(/_/g, " ")} DETECTED
+                {data.category.toUpperCase().replace(/_/g, " ")} DETECTED
               </span>
             </motion.div>
-            {/* Confidence badge */}
-            <motion.div
-              initial={{ opacity: 0, scale: 0.8 }}
-              animate={{ opacity: 1, scale: 1 }}
+            <motion.div initial={{ opacity: 0, scale: 0.8 }} animate={{ opacity: 1, scale: 1 }}
               transition={{ delay: 0.7, type: "spring" }}
-              className="absolute bottom-3 right-3 glass rounded-xl px-3 py-2 flex items-center gap-1.5"
-            >
+              className="absolute bottom-3 right-3 glass rounded-xl px-3 py-2 flex items-center gap-1.5">
               <Star size={11} className="text-[#C8A87A] fill-[#C8A87A]" />
-              <span className="text-[10px] font-bold text-[#1A1A1C]">{result.confidence}% confidence</span>
+              <span className="text-[10px] font-bold text-[#1A1A1C]">{data.confidence}% confidence</span>
             </motion.div>
           </div>
 
-          {/* Key metrics right */}
           <div className="md:col-span-3 p-6 flex flex-col gap-5 justify-center">
             <div>
               <p className="text-[10px] font-bold text-[#9A9AA4] uppercase tracking-wider mb-1">Classified as</p>
-              <p className="text-3xl font-serif text-[#1A1A1C]">{result.type}</p>
-              <p className="text-xs text-[#9A9AA4] mt-1">{result.subcategory}</p>
+              <p className="text-3xl font-serif text-[#1A1A1C]">{data.type}</p>
+              <p className="text-xs text-[#9A9AA4] mt-1">{data.subcategory}</p>
               <div className="flex flex-wrap gap-1.5 mt-3">
-                {result.tags.map(tag => (
+                {data.tags.map((tag) => (
                   <span key={tag} className="text-[9px] font-bold text-[#5A5A62] bg-[#F5F4F1] px-2.5 py-1 rounded-full">{tag}</span>
                 ))}
               </div>
             </div>
-
-            {/* Severity bar */}
             <div>
               <div className="flex justify-between mb-2">
                 <span className="text-xs font-bold text-[#1A1A1C]">Severity</span>
-                <span className="text-xs font-bold text-[#D4726A] font-mono-data">{result.severityScore}/100</span>
+                <span className="text-xs font-bold text-[#D4726A] font-mono-data">{data.severityScore}/100</span>
               </div>
               <div className="h-2.5 bg-[#F0EDE8] rounded-full overflow-hidden">
-                <motion.div
-                  initial={{ width: 0 }}
-                  animate={{ width: `${result.severityScore}%` }}
+                <motion.div initial={{ width: 0 }} animate={{ width: `${data.severityScore}%` }}
                   transition={{ delay: 0.4, duration: 1.2, ease: "easeOut" }}
                   className="h-full rounded-full"
-                  style={{ background: "linear-gradient(to right, #C8A87A, #D4726A)" }}
-                />
+                  style={{ background: "linear-gradient(to right, #C8A87A, #D4726A)" }} />
               </div>
             </div>
-
-            {/* Economic impact highlight */}
-            <motion.div
-              className="flex items-center gap-4 p-4 rounded-2xl bg-[#FAF0E0] border border-[#EDD9B8]"
-              initial={{ opacity: 0, x: 16 }}
-              animate={{ opacity: 1, x: 0 }}
-              transition={{ delay: 0.5 }}
-            >
+            <motion.div className="flex items-center gap-4 p-4 rounded-2xl bg-[#FAF0E0] border border-[#EDD9B8]"
+              initial={{ opacity: 0, x: 16 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.5 }}>
               <div className="w-10 h-10 rounded-xl bg-[#C8A87A]/20 flex items-center justify-center">
                 <IndianRupee size={18} className="text-[#C8A87A]" />
               </div>
               <div>
-                <p className="text-2xl font-bold text-[#C8A87A] font-mono-data">{result.economic}</p>
-                <p className="text-xs text-[#A87840]">{result.period} in economic loss</p>
+                <p className="text-2xl font-bold text-[#C8A87A] font-mono-data">{data.economic}</p>
+                <p className="text-xs text-[#A87840]">{data.period} in estimated economic loss</p>
               </div>
             </motion.div>
           </div>
         </div>
       </motion.div>
 
-      {/* Analysis cards grid */}
-      <motion.div
-        className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-5"
-        variants={containerV}
-      >
+      {/* Analysis cards */}
+      <motion.div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-5" variants={containerV}>
         {analysisCards.map((card) => {
           const Icon = card.icon;
           return (
-            <motion.div
-              key={card.label}
-              variants={cardV}
-              whileHover={{ y: -3, transition: { duration: 0.2 } }}
-              className="bg-white rounded-2xl p-4 border border-[#E4E2DC] card-0 hover:card-2 transition-all cursor-default"
-              style={{ transitionDelay: `${card.delay}s` }}
-            >
-              <div
-                className="w-9 h-9 rounded-xl flex items-center justify-center mb-3"
-                style={{ background: card.bg }}
-              >
+            <motion.div key={card.label} variants={cardV} whileHover={{ y: -3, transition: { duration: 0.2 } }}
+              className="bg-white rounded-2xl p-4 border border-[#E4E2DC] card-0 hover:card-2 transition-all cursor-default">
+              <div className="w-9 h-9 rounded-xl flex items-center justify-center mb-3" style={{ background: card.bg }}>
                 <Icon size={15} style={{ color: card.color }} />
               </div>
               <p className="text-[9px] font-bold text-[#B0ACA4] uppercase tracking-wider mb-1">{card.label}</p>
@@ -510,7 +594,7 @@ function ResultsStage({ result, onReset }: { result: AnalysisResult; onReset: ()
         })}
       </motion.div>
 
-      {/* Risk score visualization */}
+      {/* Risk score */}
       <motion.div variants={cardV} className="bg-white rounded-2xl border border-[#E4E2DC] p-5 mb-5 card-0">
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-2">
@@ -518,18 +602,15 @@ function ResultsStage({ result, onReset }: { result: AnalysisResult; onReset: ()
             <span className="text-sm font-bold text-[#1A1A1C]">Infrastructure Risk Visualization</span>
           </div>
           <div className="flex items-center gap-2">
-            <span className="text-3xl font-bold text-[#D4726A] font-mono-data">{result.riskScore}</span>
+            <span className="text-3xl font-bold text-[#D4726A] font-mono-data">{data.riskScore}</span>
             <span className="text-[10px] font-bold text-[#D4726A] bg-[#FAECEA] px-2 py-1 rounded-full uppercase tracking-wide">{riskLabel}</span>
           </div>
         </div>
         <div className="flex gap-1 h-4 mb-2">
-          {Array.from({length:25}).map((_,i) => (
-            <motion.div
-              key={i}
-              className="flex-1 rounded-sm"
-              initial={{ scaleY: 0 }}
-              animate={{ scaleY: 1 }}
-              transition={{ delay: 0.6 + i*0.025, ease: "backOut" }}
+          {Array.from({ length: 25 }).map((_, i) => (
+            <motion.div key={i} className="flex-1 rounded-sm"
+              initial={{ scaleY: 0 }} animate={{ scaleY: 1 }}
+              transition={{ delay: 0.6 + i * 0.025, ease: "backOut" }}
               style={{
                 background: i < filledBars
                   ? i < Math.round(filledBars * 0.35) ? "#7A9E6E"
@@ -537,13 +618,12 @@ function ResultsStage({ result, onReset }: { result: AnalysisResult; onReset: ()
                   : "#D4726A"
                   : "#F0EDE8",
                 transformOrigin: "bottom",
-              }}
-            />
+              }} />
           ))}
         </div>
         <div className="flex justify-between text-[9px] text-[#9A9AA4]">
           <span>Safe (0)</span>
-          <span className="font-bold text-[#D4726A]">Your issue: {result.riskScore}/100</span>
+          <span className="font-bold text-[#D4726A]">Your issue: {data.riskScore}/100</span>
           <span>Critical (100)</span>
         </div>
       </motion.div>
@@ -557,34 +637,47 @@ function ResultsStage({ result, onReset }: { result: AnalysisResult; onReset: ()
           <div>
             <div className="flex items-center gap-2 mb-2">
               <p className="text-sm font-bold text-[#1A1A1C]">AI Recommended Action</p>
-              <motion.span
-                animate={{ opacity: [1, 0.5, 1] }}
-                transition={{ duration: 2, repeat: Infinity }}
-                className="text-[9px] font-bold text-[#D4726A] bg-[#FAECEA] px-2 py-0.5 rounded-full uppercase"
-              >
-                {result.urgency}
+              <motion.span animate={{ opacity: [1, 0.5, 1] }} transition={{ duration: 2, repeat: Infinity }}
+                className="text-[9px] font-bold text-[#D4726A] bg-[#FAECEA] px-2 py-0.5 rounded-full uppercase">
+                {data.urgency}
               </motion.span>
             </div>
-            <p className="text-sm text-[#5A5A62] leading-relaxed">{result.action}</p>
+            <p className="text-sm text-[#5A5A62] leading-relaxed">{data.action}</p>
           </div>
         </div>
       </motion.div>
 
-      {/* CTAs */}
+      {/* Submit CTAs */}
       <motion.div variants={cardV} className="flex flex-col sm:flex-row gap-3">
         <motion.button
-          whileHover={{ scale: 1.02 }}
-          whileTap={{ scale: 0.98 }}
-          onClick={() => router.push(`/citizen-dashboard?issue=${result.issueId}`)}
-          className="flex-1 flex items-center justify-center gap-2.5 py-4 bg-[#1A1A1C] text-white rounded-2xl font-bold text-sm hover:bg-[#2C2C2E] transition-all card-2 hover:card-3"
+          whileHover={submitting ? {} : { scale: 1.02 }}
+          whileTap={submitting ? {} : { scale: 0.98 }}
+          onClick={onSubmit}
+          disabled={submitting}
+          className={`flex-1 flex items-center justify-center gap-2.5 py-4 rounded-2xl font-bold text-sm transition-all ${
+            submitting
+              ? "bg-[#7A9E6E]/70 text-white cursor-wait"
+              : "bg-[#1A1A1C] text-white hover:bg-[#2C2C2E] card-2"
+          }`}
         >
-          <CheckCircle2 size={16} />
-          Submit to {deptShort} Authority
-          <ArrowRight size={15} />
+          {submitting ? (
+            <>
+              <motion.div animate={{ rotate: 360 }} transition={{ duration: 1, repeat: Infinity, ease: "linear" }}>
+                <Loader2 size={16} />
+              </motion.div>
+              Submitting to authorities...
+            </>
+          ) : (
+            <>
+              <CheckCircle2 size={16} />
+              Submit Report to {deptShort}
+              <ArrowRight size={15} />
+            </>
+          )}
         </motion.button>
         <Link
           href="/citizen-dashboard"
-          className="flex items-center justify-center gap-2 px-6 py-4 rounded-2xl font-semibold text-sm text-[#5A5A62] border border-[#E4E2DC] hover:border-[#D0CCC4] hover:bg-white transition-all card-0 hover:card-1"
+          className="flex items-center justify-center gap-2 px-6 py-4 rounded-2xl font-semibold text-sm text-[#5A5A62] border border-[#E4E2DC] hover:border-[#D0CCC4] hover:bg-white transition-all"
         >
           <BarChart3 size={15} />
           My Dashboard
@@ -602,108 +695,327 @@ function ResultsStage({ result, onReset }: { result: AnalysisResult; onReset: ()
   );
 }
 
-/* ─── PAGE ─────────────────────────────────────────────── */
-const MIN_ANALYZE_MS = 2_600; // keep the animation visible for at least this long
+/* ─── CONFETTI ────────────────────────────────────────────────────────────── */
+const CONFETTI_COLORS = ["#7A9E6E","#C8A87A","#D4726A","#6A88AA","#5E9E9E","#FFD700","#FF69B4","#4ECDC4"];
 
+function Confetti() {
+  const pieces = useMemo(() =>
+    Array.from({ length: 80 }, (_, i) => ({
+      id: i,
+      color: CONFETTI_COLORS[i % CONFETTI_COLORS.length],
+      left: Math.random() * 100,
+      delay: Math.random() * 1.2,
+      duration: 2.5 + Math.random() * 2,
+      size: 4 + Math.floor(Math.random() * 8),
+      shape: i % 3 === 0 ? "rounded-full" : i % 3 === 1 ? "rounded-sm" : "",
+    }))
+  , []);
+
+  return (
+    <div className="fixed inset-0 pointer-events-none z-[999] overflow-hidden">
+      {pieces.map((p) => (
+        <motion.div
+          key={p.id}
+          className={`absolute ${p.shape}`}
+          style={{
+            left: `${p.left}%`,
+            top: -20,
+            width: p.size,
+            height: p.size,
+            backgroundColor: p.color,
+          }}
+          initial={{ y: -20, rotate: 0, opacity: 1, x: 0 }}
+          animate={{
+            y: typeof window !== 'undefined' ? window.innerHeight + 40 : 900,
+            rotate: 720 + Math.random() * 360,
+            opacity: [1, 1, 0.8, 0],
+            x: (Math.random() - 0.5) * 200,
+          }}
+          transition={{ duration: p.duration, delay: p.delay, ease: [0.23, 0.57, 0.92, 0.8] }}
+        />
+      ))}
+    </div>
+  );
+}
+
+/* ─── SUCCESS STAGE ───────────────────────────────────────────────────────── */
+function SuccessStage({
+  issueId,
+  data,
+  onReset,
+}: {
+  issueId: string;
+  data: AnalysisData;
+  onReset: () => void;
+}) {
+  const router = useRouter();
+  const isLocal = issueId.startsWith("local_");
+  const [copied, setCopied] = useState(false);
+  const [countdown, setCountdown] = useState(10);
+  const [showConfetti, setShowConfetti] = useState(true);
+  useEffect(() => {
+    const t = setTimeout(() => setShowConfetti(false), 5000);
+    return () => clearTimeout(t);
+  }, []);
+
+  const deptShort = data.dept.match(/\(([^)]+)\)/)?.[1] ?? data.dept.split(" ")[0];
+  const sevColor = data.severity === "critical" ? "#D4726A"
+    : data.severity === "high" ? "#C8A87A"
+    : data.severity === "medium" ? "#6A88AA"
+    : "#7A9E6E";
+
+  const handleCopy = () => {
+    navigator.clipboard.writeText(issueId).catch(() => {});
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  // Auto-navigate to issue page after countdown
+  useEffect(() => {
+    if (isLocal) return;
+    const interval = setInterval(() => setCountdown((c) => c - 1), 1000);
+    return () => clearInterval(interval);
+  }, [isLocal]);
+
+  useEffect(() => {
+    if (!isLocal && countdown <= 0) {
+      router.push(`/issues/${issueId}`);
+    }
+  }, [countdown, isLocal, issueId, router]);
+
+  const stats = [
+    { label: "Department", value: deptShort, color: "#7A9E6E", bg: "#EAF2E6" },
+    { label: "Severity",   value: data.severity.charAt(0).toUpperCase() + data.severity.slice(1), color: sevColor, bg: sevColor + "18" },
+    { label: "Daily Cost", value: data.economic, color: "#C8A87A", bg: "#FAF0E0" },
+  ];
+
+  return (
+    <motion.div
+      className="max-w-lg mx-auto text-center"
+      variants={containerV}
+      initial="hidden"
+      animate="visible"
+    >
+      {showConfetti && <Confetti />}
+      {/* Animated checkmark */}
+      <motion.div variants={cardV} className="flex justify-center mb-8">
+        <div className="relative flex items-center justify-center">
+          {[1, 2, 3].map((i) => (
+            <motion.div
+              key={i}
+              className="absolute rounded-full"
+              style={{ width: 96, height: 96, background: `rgba(122, 158, 110, ${0.15 / i})` }}
+              initial={{ scale: 1, opacity: 0 }}
+              animate={{ scale: [1, 1.8 + i * 0.4], opacity: [0.6, 0] }}
+              transition={{ delay: i * 0.15, duration: 1.4, ease: "easeOut", repeat: Infinity, repeatDelay: 2.8 }}
+            />
+          ))}
+          <motion.div
+            initial={{ scale: 0, rotate: -30 }}
+            animate={{ scale: 1, rotate: 0 }}
+            transition={{ type: "spring", stiffness: 180, damping: 14, delay: 0.15 }}
+            className="relative w-24 h-24 rounded-3xl bg-[#7A9E6E] flex items-center justify-center shadow-xl shadow-[#7A9E6E]/30"
+          >
+            <CheckCircle2 size={44} className="text-white" strokeWidth={2} />
+          </motion.div>
+        </div>
+      </motion.div>
+
+      {/* Heading */}
+      <motion.div variants={cardV}>
+        <h2 className="text-5xl font-serif text-[#1A1A1C] mb-3">Issue Reported! 🎉</h2>
+        <p className="text-[#9A9AA4] text-base mb-6">Your report is live and AI is routing it to the right authority.</p>
+        <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-[#EAF2E6] border border-[#C8DFC0]">
+          <span className="w-2 h-2 rounded-full bg-[#7A9E6E] pulse-dot" />
+          <span className="text-xs font-bold text-[#5A7A50]">Live — Resolution tracking activated</span>
+        </div>
+      </motion.div>
+
+      {/* Issue ID */}
+      {!isLocal && (
+        <motion.div variants={cardV}
+          className="inline-flex items-center gap-2 bg-[#F5F4F1] border border-[#E4E2DC] rounded-xl px-4 py-2.5 mb-6 mt-6">
+          <span className="text-[10px] font-bold text-[#9A9AA4] uppercase tracking-wider">Issue ID</span>
+          <span className="text-xs font-mono text-[#5A5A62]">{issueId.slice(0, 22)}…</span>
+          <button onClick={handleCopy}
+            className="ml-1 p-1 rounded-lg hover:bg-[#E8E4DC] transition-colors text-[#9A9AA4] hover:text-[#5A5A62]">
+            {copied ? <CheckCircle2 size={13} className="text-[#7A9E6E]" /> : <Copy size={13} />}
+          </button>
+        </motion.div>
+      )}
+
+      {/* Stats row */}
+      <motion.div variants={cardV} className="grid grid-cols-3 gap-3 mb-8">
+        {stats.map((s) => (
+          <div key={s.label} className="rounded-2xl border border-[#E4E2DC] p-4 bg-white">
+            <p className="text-[9px] font-bold text-[#B0ACA4] uppercase tracking-wider mb-1">{s.label}</p>
+            <p className="text-sm font-bold font-mono-data" style={{ color: s.color }}>{s.value}</p>
+          </div>
+        ))}
+      </motion.div>
+
+      {/* What happens next */}
+      <motion.div variants={cardV} className="bg-[#F5F4F1] rounded-2xl p-5 mb-8 text-left">
+        <p className="text-[10px] font-bold text-[#9A9AA4] uppercase tracking-wider mb-3">What happens next</p>
+        <div className="flex flex-col gap-2.5">
+          {[
+            { step: "1", text: `Your report reaches ${deptShort} authorities`, done: true },
+            { step: "2", text: "Field officer scheduled for inspection", done: false },
+            { step: "3", text: "Work order issued and tracked live", done: false },
+          ].map((item) => (
+            <div key={item.step} className="flex items-center gap-3">
+              <div className={`w-5 h-5 rounded-full flex items-center justify-center flex-shrink-0 text-[9px] font-bold ${
+                item.done ? "bg-[#7A9E6E] text-white" : "bg-[#E4E2DC] text-[#9A9AA4]"
+              }`}>
+                {item.done ? "✓" : item.step}
+              </div>
+              <p className="text-xs text-[#5A5A62]">{item.text}</p>
+            </div>
+          ))}
+        </div>
+      </motion.div>
+
+      {/* CTAs */}
+      <motion.div variants={cardV} className="flex flex-col gap-3">
+        {!isLocal && (
+          <motion.button
+            whileHover={{ scale: 1.02 }}
+            whileTap={{ scale: 0.97 }}
+            onClick={() => router.push(`/issues/${issueId}`)}
+            className="w-full flex items-center justify-center gap-2.5 py-4 bg-[#1A1A1C] text-white rounded-2xl font-bold text-sm hover:bg-[#2C2C2E] transition-all card-2"
+          >
+            <ExternalLink size={15} />
+            Track This Issue
+            {countdown > 0 && (
+              <span className="ml-1 text-[10px] font-normal text-white/60">({countdown}s)</span>
+            )}
+          </motion.button>
+        )}
+        <div className="flex gap-3">
+          <Link href="/citizen-dashboard"
+            className="flex-1 flex items-center justify-center gap-2 py-3.5 rounded-2xl font-semibold text-sm text-[#5A5A62] border border-[#E4E2DC] hover:bg-white transition-all">
+            <BarChart3 size={14} />
+            My Dashboard
+          </Link>
+          <motion.button
+            whileHover={{ scale: 1.02 }}
+            onClick={onReset}
+            className="flex-1 flex items-center justify-center gap-2 py-3.5 rounded-2xl font-semibold text-sm text-[#9A9AA4] hover:text-[#5A5A62] border border-[#E4E2DC] hover:bg-[#F5F4F1] transition-all"
+          >
+            <Camera size={14} />
+            Report Another
+          </motion.button>
+        </div>
+      </motion.div>
+    </motion.div>
+  );
+}
+
+/* ─── PAGE ────────────────────────────────────────────────────────────────── */
 export default function ReportPage() {
   const [stage, setStage] = useState<Stage>("upload");
-  const [analyzeStartMs, setAnalyzeStartMs] = useState(0);
-  const { activeStep, result, error, startFlow, reset } = useReportFlow();
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [analysisData, setAnalysisData] = useState<AnalysisData | null>(null);
+  const [issueId, setIssueId] = useState<string | null>(null);
+  const prevBlobUrlRef = useRef<string | null>(null);
 
-  // Transition to results once flow is done + minimum display time has elapsed
+  const { analyzeStep, submitting, analyzeImage, submitIssue, reset } = useReportFlow();
+
+  // Revoke old blob URL when a new one is created
+  const setPreviewSafe = useCallback((file: File) => {
+    if (prevBlobUrlRef.current) URL.revokeObjectURL(prevBlobUrlRef.current);
+    const url = URL.createObjectURL(file);
+    prevBlobUrlRef.current = url;
+    setPreviewUrl(url);
+  }, []);
+
+  // Cleanup on unmount
   useEffect(() => {
-    if (result && stage === "analyzing") {
-      const elapsed = Date.now() - analyzeStartMs;
-      const delay = Math.max(0, MIN_ANALYZE_MS - elapsed);
-      const id = setTimeout(() => setStage("results"), delay);
-      return () => clearTimeout(id);
-    }
-  }, [result, stage, analyzeStartMs]);
+    return () => {
+      if (prevBlobUrlRef.current) URL.revokeObjectURL(prevBlobUrlRef.current);
+    };
+  }, []);
 
-  // On error, return to upload with message shown
-  useEffect(() => {
-    if (error && stage === "analyzing") {
-      setStage("upload");
-    }
-  }, [error, stage]);
+  const handleFileSelect = useCallback((file: File) => {
+    setSelectedFile(file);
+    setPreviewSafe(file);
+    setStage("preview");
+  }, [setPreviewSafe]);
 
-  const handleUpload = useCallback(async (file: File) => {
-    setAnalyzeStartMs(Date.now());
+  const handleStartAnalysis = useCallback(async () => {
+    if (!selectedFile) return;
     setStage("analyzing");
-    await startFlow(file);
-  }, [startFlow]);
+    const data = await analyzeImage(selectedFile);
+    setAnalysisData(data);
+    setStage("review");
+  }, [selectedFile, analyzeImage]);
+
+  const handleSubmit = useCallback(async () => {
+    if (!analysisData || !selectedFile) return;
+    const id = await submitIssue(analysisData, selectedFile);
+    setIssueId(id);
+    setStage("success");
+  }, [analysisData, selectedFile, submitIssue]);
 
   const handleReset = useCallback(() => {
     reset();
+    setSelectedFile(null);
+    setAnalysisData(null);
+    setIssueId(null);
     setStage("upload");
   }, [reset]);
 
   return (
     <div className="min-h-screen bg-[#FAF9F6]">
       <Navbar />
-      {/* Orbs */}
+
+      {/* Background orbs */}
       <div className="fixed top-[-120px] right-[-120px] w-[480px] h-[480px] rounded-full pointer-events-none"
         style={{ background: "radial-gradient(circle, rgba(200,223,192,0.3) 0%, transparent 70%)" }} />
       <div className="fixed bottom-[-80px] left-[-80px] w-[360px] h-[360px] rounded-full pointer-events-none"
         style={{ background: "radial-gradient(circle, rgba(184,216,216,0.25) 0%, transparent 70%)" }} />
 
-      <div className="pt-28 pb-20 px-6">
-        {/* Progress stepper */}
-        <div className="flex items-center justify-center mb-16">
-          {(["upload","analyzing","results"] as Stage[]).map((s, i) => {
-            const done = stage==="results" && s!=="results" || stage==="analyzing" && s==="upload";
-            const active = stage===s;
-            return (
-              <div key={s} className="flex items-center gap-3">
-                <div className="flex items-center gap-2.5">
-                  <motion.div
-                    animate={active ? { scale: [1, 1.1, 1] } : {}}
-                    transition={{ duration: 1.5, repeat: Infinity }}
-                    className={`w-8 h-8 rounded-xl flex items-center justify-center text-xs font-bold transition-all ${
-                      done ? "bg-[#7A9E6E] text-white"
-                           : active ? "bg-[#1A1A1C] text-white card-1"
-                           : "bg-[#F0EDE8] text-[#9A9AA4]"
-                    }`}
-                  >
-                    {done ? <CheckCircle2 size={14} /> : i+1}
-                  </motion.div>
-                  <span className={`text-xs font-bold capitalize transition-all ${active?"text-[#1A1A1C]":"text-[#9A9AA4]"}`}>
-                    {s==="upload"?"Upload":s==="analyzing"?"Analyzing":"Results"}
-                  </span>
-                </div>
-                {i<2 && (
-                  <div className="w-12 h-px mx-2 bg-[#E4E2DC] relative overflow-hidden">
-                    {done && (
-                      <motion.div
-                        className="absolute inset-0 bg-[#7A9E6E]"
-                        initial={{ x: "-100%" }}
-                        animate={{ x: 0 }}
-                        transition={{ duration: 0.4 }}
-                      />
-                    )}
-                  </div>
-                )}
-              </div>
-            );
-          })}
-        </div>
+      <div className="pt-28 pb-24 px-6">
+        <Stepper stage={stage} />
 
         <AnimatePresence mode="wait">
           <motion.div
             key={stage}
-            initial={{ opacity: 0, y: 20 }}
+            initial={{ opacity: 0, y: 24 }}
             animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -20 }}
-            transition={{ duration: 0.35, ease: [0.22, 1, 0.36, 1] }}
+            exit={{ opacity: 0, y: -16 }}
+            transition={{ duration: 0.38, ease: [0.22, 1, 0.36, 1] }}
           >
             {stage === "upload" && (
-              <UploadStage onUpload={handleUpload} error={error} />
+              <UploadStage onUpload={handleFileSelect} />
+            )}
+            {stage === "preview" && selectedFile && previewUrl && (
+              <PreviewStage
+                file={selectedFile}
+                previewUrl={previewUrl}
+                onConfirm={handleStartAnalysis}
+                onCancel={handleReset}
+              />
             )}
             {stage === "analyzing" && (
-              <AnalyzingStage activeStep={activeStep} />
+              <AnalyzingStage analyzeStep={analyzeStep} />
             )}
-            {stage === "results" && result && (
-              <ResultsStage result={result} onReset={handleReset} />
+            {stage === "review" && analysisData && previewUrl && (
+              <ReviewStage
+                data={analysisData}
+                previewUrl={previewUrl}
+                submitting={submitting}
+                onSubmit={handleSubmit}
+                onReset={handleReset}
+              />
+            )}
+            {stage === "success" && issueId && analysisData && (
+              <SuccessStage
+                issueId={issueId}
+                data={analysisData}
+                onReset={handleReset}
+              />
             )}
           </motion.div>
         </AnimatePresence>

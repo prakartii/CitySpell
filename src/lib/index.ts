@@ -2,6 +2,7 @@
 export * from './firebase/config';
 export * from './firebase/auth';
 export * from './firebase/storage';
+export * from './firebase/demo';
 export { COLLECTIONS } from './firebase/firestore';
 
 // Types
@@ -27,3 +28,4 @@ export * from './hooks/useCopilotReports';
 
 // Context
 export { AuthProvider, useAuthContext } from './context/AuthContext';
+export { ToastProvider, useToast } from './context/ToastContext';

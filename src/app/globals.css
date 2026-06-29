@@ -1,3 +1,6 @@
+@import 'leaflet/dist/leaflet.css';
+@import 'leaflet.markercluster/dist/MarkerCluster.css';
+@import 'leaflet.markercluster/dist/MarkerCluster.Default.css';
 @import "tailwindcss";
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
@@ -556,3 +559,221 @@
   to   { transform: scaleX(1); }
 }
 .bar-fill { transform-origin: left; animation: bar-fill 1.2s cubic-bezier(0.22,1,0.36,1) forwards; }
+
+/* ─── HACKATHON POLISH UTILITIES ──────────────────────────── */
+
+/* Enhanced skeleton shimmer */
+@keyframes skeleton-shimmer {
+  0%   { background-position: -600px 0; }
+  100% { background-position: 600px 0; }
+}
+.skeleton {
+  background: linear-gradient(90deg, #F0EDE8 0px, #FAF9F6 100px, #EDEAE4 200px, #F0EDE8 300px);
+  background-size: 600px 100%;
+  animation: skeleton-shimmer 1.6s ease-in-out infinite;
+  border-radius: 8px;
+}
+
+/* Confetti keyframes */
+@keyframes confetti-fall {
+  0%   { transform: translateY(-20px) rotate(0deg); opacity: 1; }
+  80%  { opacity: 1; }
+  100% { transform: translateY(110vh) rotate(720deg); opacity: 0; }
+}
+@keyframes confetti-sway {
+  0%,100% { margin-left: 0; }
+  25%     { margin-left: 20px; }
+  75%     { margin-left: -20px; }
+}
+
+/* Progress ring */
+@keyframes ring-fill {
+  from { stroke-dashoffset: 251; }
+  to   { stroke-dashoffset: var(--ring-offset, 0); }
+}
+.progress-ring { animation: ring-fill 1.4s cubic-bezier(0.22,1,0.36,1) forwards; }
+
+/* Gradient card variants */
+.gradient-card-sage {
+  background: linear-gradient(135deg, #EAF2E6 0%, #F8FAF6 60%, #EAF2E6 100%);
+}
+.gradient-card-warm {
+  background: linear-gradient(135deg, #FAF0E0 0%, #FFFAF4 60%, #FAF0E0 100%);
+}
+.gradient-card-blue {
+  background: linear-gradient(135deg, #E8EFF6 0%, #F4F7FA 60%, #E8EFF6 100%);
+}
+.gradient-card-coral {
+  background: linear-gradient(135deg, #FAECEA 0%, #FEF5F4 60%, #FAECEA 100%);
+}
+.gradient-card-dark {
+  background: linear-gradient(135deg, #1A2030 0%, #111827 60%, #1A2030 100%);
+}
+
+/* Enhanced glassmorphism */
+.glass-card {
+  background: rgba(255,255,255,0.82);
+  backdrop-filter: blur(32px) saturate(200%);
+  -webkit-backdrop-filter: blur(32px) saturate(200%);
+  border: 1px solid rgba(255,255,255,0.65);
+  box-shadow: 0 4px 24px rgba(0,0,0,0.06), inset 0 1px 0 rgba(255,255,255,0.8);
+}
+.glass-panel {
+  background: rgba(250,249,246,0.92);
+  backdrop-filter: blur(40px) saturate(200%);
+  -webkit-backdrop-filter: blur(40px) saturate(200%);
+  border: 1px solid rgba(228,226,220,0.8);
+  box-shadow: 0 8px 32px rgba(0,0,0,0.08), inset 0 1px 0 rgba(255,255,255,0.9);
+}
+.glass-sage-card {
+  background: rgba(234,242,230,0.85);
+  backdrop-filter: blur(24px) saturate(180%);
+  -webkit-backdrop-filter: blur(24px) saturate(180%);
+  border: 1px solid rgba(122,158,110,0.25);
+  box-shadow: 0 4px 20px rgba(122,158,110,0.1);
+}
+
+/* Status badge base styles */
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 10px;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+}
+.badge-dot::before {
+  content: "";
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: currentColor;
+  flex-shrink: 0;
+}
+.badge-reported  { background: #E4F2F2; color: #5E9E9E; }
+.badge-assigned  { background: #E8EFF6; color: #6A88AA; }
+.badge-progress  { background: #FAF0E0; color: #C8A87A; }
+.badge-resolved  { background: #EAF2E6; color: #7A9E6E; }
+.badge-rejected  { background: #FAECEA; color: #D4726A; }
+.badge-critical  { background: #FAECEA; color: #D4726A; }
+.badge-high      { background: #FEF3E2; color: #C8A87A; }
+.badge-medium    { background: #E4F2F2; color: #5E9E9E; }
+.badge-low       { background: #EAF2E6; color: #7A9E6E; }
+
+/* Micro interactions */
+.press { transition: transform 0.1s ease; }
+.press:active { transform: scale(0.96); }
+
+.smooth-lift {
+  transition: transform 0.22s cubic-bezier(0.22,1,0.36,1), box-shadow 0.22s ease;
+}
+.smooth-lift:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 8px 24px rgba(0,0,0,0.10);
+}
+
+/* Input glow focus variant */
+.input-glow-sage {
+  transition: box-shadow 0.18s ease, border-color 0.18s ease;
+}
+.input-glow-sage:focus {
+  outline: none;
+  border-color: #7A9E6E;
+  box-shadow: 0 0 0 3px rgba(122,158,110,0.14);
+}
+.input-glow-blue:focus {
+  outline: none;
+  border-color: #6A88AA;
+  box-shadow: 0 0 0 3px rgba(106,136,170,0.14);
+}
+
+/* Page entrance animation */
+@keyframes page-enter {
+  from { opacity: 0; transform: translateY(10px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.page-enter { animation: page-enter 0.45s cubic-bezier(0.22,1,0.36,1) forwards; }
+
+/* Fade-in-up for staggered cards */
+@keyframes fade-in-up {
+  from { opacity: 0; transform: translateY(20px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.fade-in-up-1 { animation: fade-in-up 0.5s ease forwards 0.05s; opacity: 0; }
+.fade-in-up-2 { animation: fade-in-up 0.5s ease forwards 0.12s; opacity: 0; }
+.fade-in-up-3 { animation: fade-in-up 0.5s ease forwards 0.19s; opacity: 0; }
+.fade-in-up-4 { animation: fade-in-up 0.5s ease forwards 0.26s; opacity: 0; }
+
+/* Shimmer text (premium headings) */
+.shimmer-text {
+  background: linear-gradient(90deg, #7A9E6E 0%, #C8A87A 30%, #6A88AA 60%, #7A9E6E 100%);
+  background-size: 300% auto;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  animation: gradient-pan 5s linear infinite;
+}
+
+/* Frosted sidebar (for nav overlays) */
+.frosted-nav {
+  background: rgba(250,249,246,0.88);
+  backdrop-filter: blur(20px) saturate(180%);
+  -webkit-backdrop-filter: blur(20px) saturate(180%);
+  border-bottom: 1px solid rgba(228,226,220,0.7);
+}
+
+/* Ring counter for circular progress (SVG-based) */
+.ring-track { fill: none; stroke: rgba(0,0,0,0.06); }
+.ring-fill   { fill: none; stroke-linecap: round; transition: stroke-dashoffset 1s cubic-bezier(0.22,1,0.36,1); }
+
+/* Animated gradient border */
+@keyframes border-dance {
+  0%,100% { background-position: 0% 50%; }
+  50%     { background-position: 100% 50%; }
+}
+.gradient-border {
+  position: relative;
+  background-clip: padding-box;
+  border: 2px solid transparent;
+}
+.gradient-border::before {
+  content: "";
+  position: absolute;
+  inset: -2px;
+  border-radius: inherit;
+  background: linear-gradient(135deg, #7A9E6E, #C8A87A, #6A88AA, #7A9E6E);
+  background-size: 300% 300%;
+  animation: border-dance 4s ease infinite;
+  z-index: -1;
+}
+
+/* Loading dots */
+@keyframes loading-dot {
+  0%,80%,100% { transform: scale(0); opacity: 0.4; }
+  40%         { transform: scale(1); opacity: 1; }
+}
+.loading-dots > span {
+  display: inline-block;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: currentColor;
+  animation: loading-dot 1.4s ease-in-out infinite;
+}
+.loading-dots > span:nth-child(2) { animation-delay: 0.2s; }
+.loading-dots > span:nth-child(3) { animation-delay: 0.4s; }
+
+/* Ticket ID monospace badge */
+.ticket-id {
+  font-family: var(--font-geist-mono), monospace;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  background: #F5F4F1;
+  border: 1px solid #E4E2DC;
+  border-radius: 6px;
+  padding: 2px 8px;
+  color: #5A5A62;
+}

@@ -43,6 +43,7 @@ export const COLLECTIONS = {
   DEPARTMENTS: 'departments',
   ASSIGNMENTS: 'assignments',
   COPILOT_REPORTS: 'copilot_reports',
+  NOTIFICATIONS: 'notifications',
 } as const;
 
 export type CollectionName = (typeof COLLECTIONS)[keyof typeof COLLECTIONS];
@@ -108,6 +109,16 @@ export async function updateDocument<T extends Record<string, unknown>>(
 
 export async function deleteDocument(col: CollectionName, id: string): Promise<void> {
   await deleteDoc(docRef(col, id));
+}
+
+// For updates that need raw FieldValue objects (arrayUnion, arrayRemove, increment).
+// Unlike updateDocument, this does NOT auto-append updatedAt.
+export async function rawUpdateDocument(
+  col: CollectionName,
+  id: string,
+  data: Record<string, unknown>,
+): Promise<void> {
+  await updateDoc(docRef(col, id), data);
 }
 
 // ─── Realtime subscriptions ───────────────────────────────────────────────────

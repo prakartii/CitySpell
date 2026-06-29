@@ -10,6 +10,7 @@ import {
   subscribeToIssue,
   toggleUpvote,
   updateIssueStatus,
+  subscribeToAllIssues,
 } from '../services/issueService';
 import type { IssueDoc, IssueStatus } from '../types/collections';
 
@@ -141,6 +142,22 @@ export function useDepartmentIssues(departmentId: string | null) {
     });
     return unsub;
   }, [departmentId]);
+
+  return { issues, loading };
+}
+
+export function useAllIssues() {
+  const [issues, setIssues] = useState<IssueDoc[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    setLoading(true);
+    const unsub = subscribeToAllIssues((docs) => {
+      setIssues(docs);
+      setLoading(false);
+    });
+    return unsub;
+  }, []);
 
   return { issues, loading };
 }
